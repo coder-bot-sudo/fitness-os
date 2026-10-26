@@ -12,6 +12,7 @@
       '<button type="button" class="btn" onclick="chooseStoredFood('+i+')">Erfassen</button></div>';
   }
   function extraFood(){
+    if(!Array.isArray(db.favoriteFoodIds))db.favoriteFoodIds=[];
     const favs=db.favoriteFoodIds.map(id=>db.foodCatalog.find(x=>x.id===id)).filter(Boolean);
     const recentIds=[...db.food].reverse().filter(x=>x.productCode).map(x=>x.productCode);
     const unique=[...new Set(recentIds)].slice(0,8);
@@ -22,6 +23,7 @@
       '<p class="small">Favoriten und Verlauf werden mit deinem Fitness-OS-Datenbestand synchronisiert.</p></section>';
   }
   window.toggleFoodFavorite=function(id){
+    if(!Array.isArray(db.favoriteFoodIds))db.favoriteFoodIds=[];
     const ids=db.favoriteFoodIds;
     db.favoriteFoodIds=ids.includes(id)?ids.filter(x=>x!==id):[...ids,id];
     persist();render();
