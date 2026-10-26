@@ -27,28 +27,29 @@ function v4ExerciseStatus(e,index){
 function v4Strip(e,interactive=false,index=-1){
   const rows=e.rows||[];
   return '<div class="v4-set-strip" role="group" aria-label="Satzfortschritt">'+rows.map((r,j)=>{
-    const state=r.done?'done':r.skipped?'skipped':'pending',label='Satz '+(j+1)+': '+(r.done?'erledigt':r.skipped?'übersprungen':'offen');
+    const isActive=(index<0||index===active.focus)&&j===rows.findIndex(x=>!x.done&&!x.skipped);
+    const state=r.done?'done':r.skipped?'skipped':isActive?'active':'pending',label='Satz '+(j+1)+': '+(r.done?'erledigt':r.skipped?'übersprungen':isActive?'aktuell':'offen');
     const text=r.done?'✓':r.skipped?'↶':String(j+1);
     return interactive&&r.skipped&&!r.done
       ?'<button type="button" class="v4-segment '+state+'" title="Satz '+(j+1)+' reaktivieren" aria-label="'+label+' – reaktivieren" onclick="v4RestoreSet('+index+','+j+')">'+text+'</button>'
       :'<span class="v4-segment '+state+'" title="'+label+'" aria-label="'+label+'">'+text+'</span>';
   }).join('')+'</div>';
 }
-function v4OpenOverview(){if(!active)return;v4OverviewOpen=true;render();window.scrollTo({top:0,behavior:'instant'})}
-function v4CloseOverview(){v4OverviewOpen=false;render();window.scrollTo({top:0,behavior:'instant'})}
-function v4JumpTo(index){v4OverviewOpen=false;v3Select(index);window.scrollTo({top:0,behavior:'instant'})}
+function v4OpenOverview(){if(!active)return;v4OverviewOpen=true;render();window.scrollTo({top:0,behavior:'auto'})}
+function v4CloseOverview(){v4OverviewOpen=false;render();window.scrollTo({top:0,behavior:'auto'})}
+function v4JumpTo(index){v4OverviewOpen=false;v3Select(index);window.scrollTo({top:0,behavior:'auto'})}
 function v4RestoreExercise(index){
   const e=active?.ex?.[index];if(!e)return;
   e.rows.forEach(r=>{if(r.skipped&&!r.done)delete r.skipped});
   if(active.v4LastSkipped===index)delete active.v4LastSkipped;
-  active.focus=index;v4OverviewOpen=false;stopRest();v3Save();render();window.scrollTo({top:0,behavior:'instant'});
+  active.focus=index;v4OverviewOpen=false;stopRest();v3Save();render();window.scrollTo({top:0,behavior:'auto'});
 }
 function v4RestoreSet(index,setIndex){
   const r=active?.ex?.[index]?.rows?.[setIndex];
   if(!r||r.done||!r.skipped)return;
   delete r.skipped;
   if(active.v4LastSkipped===index&&!active.ex[index].rows.some(x=>x.skipped))delete active.v4LastSkipped;
-  active.focus=index;v4OverviewOpen=false;stopRest();v3Save();render();window.scrollTo({top:0,behavior:'instant'});
+  active.focus=index;v4OverviewOpen=false;stopRest();v3Save();render();window.scrollTo({top:0,behavior:'auto'});
 }
 function v4EndFromOverview(){
   if(!confirm('Training wirklich beenden und speichern?'))return;
