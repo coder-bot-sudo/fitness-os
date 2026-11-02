@@ -37,9 +37,9 @@ test('live navigation, discard cancellation and confirmed discard preserve histo
   await page.goto('/');
   test.skip(!(await page.evaluate(() => typeof liveDiscard === 'function')), 'Live navigation is not yet merged into main');
   await expect(page.locator('#bottomNav')).toHaveClass(/live-bottom/);
-  await page.locator('#bottomNav').getByRole('button',{name:/Übersicht/}).click();
+  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Übersicht'}).first().click();
   await expect(page.locator('#view')).toContainText('Training');
-  await page.locator('#bottomNav').getByRole('button',{name:/Mehr/}).click();
+  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Mehr'}).first().click();
   await expect(page.getByRole('button',{name:'Training verwerfen'})).toBeVisible();
   page.once('dialog',d=>d.dismiss());
   await page.getByRole('button',{name:'Training verwerfen'}).click();
