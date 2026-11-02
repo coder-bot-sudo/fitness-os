@@ -119,3 +119,22 @@ test('new plan uses full-page editor and adds exercise from catalog',async ({pag
  await page.getByRole('button',{name:/Übung hinzufügen/}).click();
  await expect(page.getByRole('heading',{name:'Übung auswählen'})).toBeVisible();
 });
+
+test('extended catalog has 96 image-free exercises and is usable in plan editor', async ({page})=>{
+ await page.goto('/');
+ const count=await page.evaluate(()=>v3Library.length);
+ expect(count).toBe(96);
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
+ await expect(page.getByRole('heading',{name:'Übung auswählen'})).toBeVisible();
+ const input=page.getByRole('textbox',{name:'Übung suchen'});
+ await input.fill('Arnold Press');
+ await expect(page.getByRole('button',{name:/Arnold Press/})).toBeVisible();
+ await page.getByRole('button',{name:/Arnold Press/}).click();
+ await expect(page.getByRole('heading',{name:'Arnold Press'})).toBeVisible();
+ await expect(page.locator('.cat-detail img')).toHaveCount(0);
+ await page.getByRole('button',{name:'Übung hinzufügen'}).click();
+ await expect(page.getByText('Arnold Press')).toBeVisible();
+ expect(await page.evaluate(()=>performance.getEntriesByType('resource').some(x=>x.name.includes('wger.de')))).toBe(false);
+});
