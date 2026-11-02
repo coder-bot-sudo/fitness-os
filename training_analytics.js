@@ -74,7 +74,7 @@ function analyticsOverview(){
 function analyticsDetails(){
  const name=analyticsExercise,all=analyticsAllSets().filter(x=>x.name===name);
  const series=analyticsSeries(name),first=series[0],last=series.at(-1),delta=first&&last?last.value-first.value:null;
- const unit=analyticsMetric==='reps'?'Wdh.':'kg';
+ const unit=analyticsMetric==='reps'?'Wdh.':analyticsMetric==='volume'?'kg × Wdh.':'kg';
  const metricName={weight:'Höchstes Gewicht',e1rm:'Geschätztes 1RM',volume:'Trainingsvolumen',reps:'Max. Wiederholungen'}[analyticsMetric];
  const records=all.length?'<div class="an-records"><h3>Persönliche Bestwerte</h3><div>Höchstes Gewicht <b>'+analyticsFormat(Math.max(...all.map(r=>r.kg)))+' kg</b></div><div>Meiste Wiederholungen <b>'+Math.max(...all.map(r=>r.reps))+' Wdh.</b></div></div>':'';
  const dates=[...new Set(analyticsPeriod(all).map(x=>x.date))].reverse();
