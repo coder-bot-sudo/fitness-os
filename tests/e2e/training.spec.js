@@ -26,7 +26,7 @@ test.beforeEach(async ({page}) => {
 test('global navigation remains available without active workout', async ({page}) => {
   await page.goto('/');
   await expect(page.locator('#bottomNav')).not.toHaveClass(/live-bottom/);
-  await page.getByRole('button', {name:/Training/}).last().click();
+  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
   await expect(page.getByText('Training starten')).toBeVisible();
 });
 
