@@ -95,3 +95,27 @@ test('visual QA: desktop and mobile screenshots, tap target and overflow audit',
   expect(audit.overflow).toBeLessThanOrEqual(2);
   if(testInfo.project.name==='iphone-13')expect(audit.controls.every(x=>x.width>=40 && x.height>=40)).toBe(true);
 });
+
+test('plan editor saves details and order across reload',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.getByRole('heading',{name:'Trainingsplan bearbeiten'})).toBeVisible();
+ await page.getByRole('textbox',{name:'Trainingsname'}).fill('QA Oberkörper');
+ await page.getByRole('spinbutton',{name:'Sätze 1'}).fill('4');
+ await page.getByRole('spinbutton',{name:'Sätze 1'}).blur();
+ await page.getByRole('button',{name:/Fertig/}).click();
+ await page.reload();
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.getByRole('textbox',{name:'Trainingsname'})).toHaveValue('QA Oberkörper');
+ await expect(page.getByRole('spinbutton',{name:'Sätze 1'})).toHaveValue('4');
+});
+test('new plan uses full-page editor and adds exercise from catalog',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Vorlage|Plan erstellen|Neuer Plan/}).first().click();
+ await expect(page.getByRole('heading',{name:'Trainingsplan bearbeiten'})).toBeVisible();
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
+ await expect(page.getByRole('heading',{name:'Übung auswählen'})).toBeVisible();
+});
