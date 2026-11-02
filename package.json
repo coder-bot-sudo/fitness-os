@@ -1,0 +1,12 @@
+{
+  "name": "fitness-os-qa",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:mobile": "playwright test --project=iphone-13",
+    "test:e2e:desktop": "playwright test --project=desktop-chrome"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2"
+  }
+}
