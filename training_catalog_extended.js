@@ -17,14 +17,14 @@ async function catalogLoadImages(){
   if(!response.ok)throw Error('Bilderquelle nicht verfügbar');
   const json=await response.json();const list=json.results||[];
   for(const ex of list){
-   const base=String(catalogSourceName(ex)).toLowerCase().trim();
-   if(!base)continue;
+   const names=[catalogSourceName(ex),...(ex.translations||[]).map(t=>t.name)].filter(Boolean).map(n=>String(n).toLowerCase().trim());
+   if(!names.length)continue;
    for(const img of ex.images||[]){
     const url=catalogTrustedUrl(img.image||img.url);
-    const license=img.license||img.license_name||ex.license;
+    const license=img.license_title||img.license_name||img.license_short_name||img.license?.short_name||img.license?.name||ex.license_title;
     if(!url||!catalogAllowedLicense(license))continue;
     const credit=String(img.license_author||img.author||ex.license_author||'wger').slice(0,100);
-    catalogImageMap[base]={url,credit,license:String(typeof license==='object'?(license.name||''):license).slice(0,60)};
+    for(const name of names)catalogImageMap[name]={url,credit,license:String(license).slice(0,60)};
     break;
    }
   }
