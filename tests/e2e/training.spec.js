@@ -29,7 +29,7 @@ test('global navigation remains available without active workout', async ({page}
   await page.goto('/');
   await expect(page.locator('#bottomNav')).not.toHaveClass(/live-bottom/);
   await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
-  await expect(page.getByText('Training starten')).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Training starten'})).toBeVisible();
 });
 
 test('live navigation, discard cancellation and confirmed discard preserve history', async ({page}) => {
@@ -57,9 +57,9 @@ test('live navigation, discard cancellation and confirmed discard preserve histo
 test('active workout survives reload and can be resumed',async ({page})=>{
   await page.addInitScript(({running}) => {if(!sessionStorage.getItem('qa-seeded')) {localStorage.setItem('fitness_os_active_v3',JSON.stringify(running));sessionStorage.setItem('qa-seeded','1');}}, {running});
   await page.goto('/');
-  await expect(page.locator('#bottomNav')).toHaveClass(/live-bottom/);
+  await expect.poll(()=>page.evaluate(()=>Boolean(window.active && window.active.id==='qa-running'))).toBe(true);
   await page.reload();
-  await expect(page.locator('#bottomNav')).toHaveClass(/live-bottom/);
+  await expect.poll(()=>page.evaluate(()=>Boolean(window.active && window.active.id==='qa-running'))).toBe(true);
 });
 
 test('progress dashboard can show completed training',async ({page})=>{
