@@ -57,9 +57,9 @@ test('live navigation, discard cancellation and confirmed discard preserve histo
 test('active workout survives reload and can be resumed',async ({page})=>{
   await page.addInitScript(({running}) => {if(!sessionStorage.getItem('qa-seeded')) {localStorage.setItem('fitness_os_active_v3',JSON.stringify(running));sessionStorage.setItem('qa-seeded','1');}}, {running});
   await page.goto('/');
-  await expect.poll(()=>page.evaluate(()=>Boolean(window.active && window.active.id==='qa-running'))).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>Boolean(typeof active !== 'undefined' && active && active.id==='qa-running'))).toBe(true);
   await page.reload();
-  await expect.poll(()=>page.evaluate(()=>Boolean(window.active && window.active.id==='qa-running'))).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>Boolean(typeof active !== 'undefined' && active && active.id==='qa-running'))).toBe(true);
 });
 
 test('progress dashboard can show completed training',async ({page})=>{
@@ -77,4 +77,21 @@ test('no horizontal page overflow in default views',async ({page})=>{
   await page.goto('/');
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(2);
+});
+
+test('visual QA: desktop and mobile screenshots, tap target and overflow audit', async ({page},testInfo)=>{
+  await page.goto('/');
+  const visibleNav=page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first();
+  await page.screenshot({path:testInfo.outputPath('home.png'),fullPage:true});
+  await visibleNav.click();
+  await page.screenshot({path:testInfo.outputPath('training.png'),fullPage:true});
+  const audit=await page.evaluate(()=>{
+    const viewport=document.documentElement.clientWidth;
+    const overflow=document.documentElement.scrollWidth-viewport;
+    const controls=[...document.querySelectorAll('#bottomNav button')].filter(e=>getComputedStyle(e).display!=='none' && e.getBoundingClientRect().width>0).map(e=>({label:e.textContent.trim(),width:Math.round(e.getBoundingClientRect().width),height:Math.round(e.getBoundingClientRect().height)}));
+    return {viewport,overflow,controls,heading:document.querySelector('h1')?.textContent};
+  });
+  await testInfo.attach('ux-audit.json',{body:JSON.stringify(audit,null,2),contentType:'application/json'});
+  expect(audit.overflow).toBeLessThanOrEqual(2);
+  if(testInfo.project.name==='iphone-13')expect(audit.controls.every(x=>x.width>=40 && x.height>=40)).toBe(true);
 });
