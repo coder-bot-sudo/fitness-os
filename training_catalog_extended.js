@@ -3,7 +3,7 @@ const catalogExtra=[["Flachbankdrücken","Brust","Langhantel"],["Enges Bankdrüc
 for(const item of catalogExtra){if(!v3Library.some(e=>e[0].toLowerCase()===item[0].toLowerCase()))v3Library.push(item)}
 const catalogAlias={"Bankdrücken":"bench press","Kniebeugen":"squat","Kreuzheben":"deadlift","Beinpresse":"leg press","Latzug":"lat pulldown","Klimmzüge":"pull up","Schulterdrücken":"shoulder press","Bizepscurls":"bicep curl","Plank":"plank","Liegestütze":"push up","Trizepsdrücken":"triceps pushdown"};
 
-let catalogSelected=null;
+let catalogSelected=null,catalogCreating=false;
 function catalogDetailOpen(name){catalogSelected=name;render()}
 function catalogDetailBack(){catalogSelected=null;render()}
 function catalogDetailHtml(){
@@ -18,7 +18,47 @@ v3CatResults=function(){
  const selected=v3List().filter(x=>(v3Muscle==='Alle'||x[1]===v3Muscle)&&(v3Equipment==='Alle'||x[2]===v3Equipment)&&(!q||[x[0],catalogAlias[x[0]]||'',x[1],x[2]].some(t=>t.toLowerCase().includes(q))));
  return selected.length?selected.map(catalogCard).join(''):'<p class="small">Keine passenden Übungen gefunden.</p>';
 };
+// Persist custom entries with their metadata in the existing synchronized database.
+const catalogBaseList=v3List;
+v3List=function(){
+ const listed=catalogBaseList();
+ const own=new Map((db.exercises||[]).filter(x=>x&&typeof x==='object'&&typeof x.name==='string'&&x.custom).map(x=>[x.name.trim().toLocaleLowerCase('de'),x]));
+ return listed.map(row=>{
+  const custom=own.get(row[0].trim().toLocaleLowerCase('de'));
+  return custom?[row[0],custom.muscle||'Weitere',custom.equipment||'Unbekannt']:row;
+ });
+};
+function catalogCreateOpen(){catalogSelected=null;catalogCreating=true;render()}
+function catalogCreateBack(){catalogCreating=false;render()}
+function catalogCreateForm(){
+ const groups=['Brust','Rücken','Schultern','Beine','Arme','Core','Weitere'];
+ const equipment=['Kurzhantel','Langhantel','Maschine','Kabel','Körpergewicht','Unbekannt'];
+ return '<section class="v3-cat card cat-detail"><button type="button" class="btn secondary" onclick="catalogCreateBack()">← Zur Übungsauswahl</button><h2>Eigene Übung erstellen</h2><p class="small">Deine Übung wird dauerhaft im Katalog gespeichert und kann in Trainingsplänen und laufenden Trainings verwendet werden.</p><form class="cat-create" onsubmit="catalogCreateSubmit(event)"><label>Übungsname<input name="name" maxlength="80" required placeholder="z. B. Rudern einarmig am Gerät" aria-label="Name der eigenen Übung"></label><label>Muskelgruppe<select name="muscle" aria-label="Muskelgruppe der eigenen Übung">'+groups.map(x=>'<option>'+x+'</option>').join('')+'</select></label><label>Equipment<select name="equipment" aria-label="Equipment der eigenen Übung">'+equipment.map(x=>'<option>'+x+'</option>').join('')+'</select></label><p id="cat-create-error" class="cat-create-error" role="alert" hidden></p><button type="submit" class="btn cat-select">Übung speichern und auswählen</button></form></section>';
+}
+function catalogCreateSubmit(event){
+ event.preventDefault();
+ const data=new FormData(event.target),name=String(data.get('name')||'').trim().replace(/\s+/g,' ').slice(0,80);
+ const error=document.getElementById('cat-create-error');
+ const fail=message=>{if(error){error.hidden=false;error.textContent=message}};
+ if(!name)return fail('Bitte einen Übungsnamen eingeben.');
+ if(v3List().some(row=>row[0].trim().toLocaleLowerCase('de')===name.toLocaleLowerCase('de')))return fail('Diese Übung gibt es bereits. Bitte wähle sie aus dem Katalog.');
+ const groups=['Brust','Rücken','Schultern','Beine','Arme','Core','Weitere'];
+ const equipment=['Kurzhantel','Langhantel','Maschine','Kabel','Körpergewicht','Unbekannt'];
+ const muscle=String(data.get('muscle')),gear=String(data.get('equipment'));
+ if(!groups.includes(muscle)||!equipment.includes(gear))return fail('Bitte gültige Kategorien auswählen.');
+ db.exercises=db.exercises||[];
+ db.exercises.push({name,muscle,equipment:gear,custom:true});
+ persist();
+ catalogCreating=false;
+ catalogSelected=null;
+ v3Choose(name);
+}
 const catalogOldOpen=v3CatalogOpen;
-v3CatalogOpen=function(mode,index=-1){catalogSelected=null;catalogOldOpen(mode,index)};
+v3CatalogOpen=function(mode,index=-1){catalogSelected=null;catalogCreating=false;catalogOldOpen(mode,index)};
 const catalogOldUI=v3CatalogUI;
-v3CatalogUI=function(){if(catalogSelected)return catalogDetailHtml();return catalogOldUI()};
+v3CatalogUI=function(){
+ if(catalogCreating)return catalogCreateForm();
+ if(catalogSelected)return catalogDetailHtml();
+ const html=catalogOldUI();
+ return html.replace('<div id="v3-cat-results">','<button class="btn cat-create-open" type="button" onclick="catalogCreateOpen()">＋ Eigene Übung erstellen</button><div id="v3-cat-results">');
+};

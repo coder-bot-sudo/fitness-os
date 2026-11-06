@@ -138,3 +138,49 @@ test('extended catalog has 96 image-free exercises and is usable in plan editor'
  await expect(page.getByText('Arnold Press')).toBeVisible();
  expect(await page.evaluate(()=>performance.getEntriesByType('resource').some(x=>x.name.includes('wger.de')))).toBe(false);
 });
+
+test('custom exercise is created in plan editor and survives reload with category', async ({page}) => {
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
+ await page.getByRole('button',{name:/Eigene Übung erstellen/}).click();
+ await page.getByRole('textbox',{name:'Name der eigenen Übung'}).fill('Mein Kabelzug');
+ await page.getByRole('combobox',{name:'Muskelgruppe der eigenen Übung'}).selectOption('Rücken');
+ await page.getByRole('combobox',{name:'Equipment der eigenen Übung'}).selectOption('Kabel');
+ await page.getByRole('button',{name:'Übung speichern und auswählen'}).click();
+ await expect(page.locator('.pe-ex-title').filter({hasText:'Mein Kabelzug'})).toHaveCount(1);
+ expect(await page.evaluate(()=>db.exercises.find(e=>e.name==='Mein Kabelzug'))).toMatchObject({muscle:'Rücken',equipment:'Kabel',custom:true});
+ await page.reload();
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.locator('.pe-ex-title').filter({hasText:'Mein Kabelzug'})).toHaveCount(1);
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
+ await page.getByRole('textbox',{name:'Übung suchen'}).fill('Mein Kabelzug');
+ await expect(page.getByRole('button',{name:/Mein Kabelzug/})).toContainText('Rücken · Kabel');
+});
+
+test('duplicate custom exercise cannot be saved', async ({page}) => {
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
+ await page.getByRole('button',{name:/Eigene Übung erstellen/}).click();
+ await page.getByRole('textbox',{name:'Name der eigenen Übung'}).fill('  bankdrücken  ');
+ await page.getByRole('button',{name:'Übung speichern und auswählen'}).click();
+ await expect(page.getByRole('alert')).toContainText('bereits');
+ await expect(page.getByRole('heading',{name:'Eigene Übung erstellen'})).toBeVisible();
+});
+
+test('custom exercise can be added during an active workout', async ({page}) => {
+ await page.addInitScript(({running})=>{
+   localStorage.setItem('fitness_os_active_v3',JSON.stringify(running));
+ },{running});
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Übungen'}).first().click();
+ await page.getByRole('button',{name:/Eigene Übung erstellen/}).click();
+ await page.getByRole('textbox',{name:'Name der eigenen Übung'}).fill('Mein Zug im Training');
+ await page.getByRole('button',{name:'Übung speichern und auswählen'}).click();
+ expect(await page.evaluate(()=>active.ex.some(e=>e.name==='Mein Zug im Training'))).toBe(true);
+ expect(await page.evaluate(()=>db.exercises.some(e=>e.name==='Mein Zug im Training'))).toBe(true);
+});
