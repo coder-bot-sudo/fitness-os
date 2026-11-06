@@ -273,3 +273,66 @@ test('simultaneous edits to the same record are not silently overwritten',async 
  });
  expect(result).toContain('SYNC_MERGE_CONFLICT');
 });
+
+test('supabase jsonb key order changes do not trigger false merge conflicts', async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(()=>{
+  const a={id:'entry',name:'Workout',meta:{weight:50,reps:2}};
+  const b={meta:{reps:2,weight:50},name:'Workout',id:'entry'};
+  return {
+   equals:cloudEqual(a,b),
+   canonical:cloudCanonical(a)===cloudCanonical(b),
+   merge:cloudMerge({rows:[a]},{rows:[a]},{rows:[b]}).rows.length
+  };
+ });
+ expect(result).toEqual({equals:true,canonical:true,merge:1});
+});
+test('offline save remains local until connection is restored', async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{
+  db=structuredClone(defaults);
+  const session={id:'offline-1',date:'2026-11-06',name:'Offline',ex:[]};
+  let pushed=null;
+  cloudUser={id:'qa-offline-user',email:'test@example.invalid'};
+  cloud={
+   from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:null})})})}),
+   rpc:async(_,args)=>{pushed=args.new_payload;return {data:1,error:null}}
+  };
+  Object.defineProperty(navigator,'onLine',{value:false,configurable:true});
+  db.sessions.push(session);persist();
+  await cloudSync();
+  const localSaved=JSON.parse(localStorage.getItem('fitness_os_v1')).sessions.some(x=>x.id==='offline-1');
+  const queued=localStorage.getItem(cloudPendingKey)==='1';
+  Object.defineProperty(navigator,'onLine',{value:true,configurable:true});
+  await cloudSync();
+  return {localSaved,queued,pushed:Boolean(pushed?.sessions.some(x=>x.id==='offline-1')),remaining:localStorage.getItem(cloudPendingKey)};
+ });
+ expect(result).toEqual({localSaved:true,queued:true,pushed:true,remaining:null});
+});
+test('cloud updates arrive automatically without a confirmation dialog',async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{
+  db=structuredClone(defaults);
+  localStorage.removeItem(cloudPendingKey);
+  const remote=structuredClone(defaults);
+  remote.sessions.push({id:'other-device',name:'Mac Session',date:'2026-11-06',ex:[]});
+  cloudUser={id:'qa-remote-user',email:'test@example.invalid'};
+  cloud={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{payload:remote,revision:8},error:null})})})}),rpc:async()=>{throw Error('No upload expected')}};
+  await cloudSync();
+  return {ids:db.sessions.map(x=>x.id),revision:cloudRevision,pending:localStorage.getItem(cloudPendingKey)};
+ });
+ expect(result).toEqual({ids:['other-device'],revision:8,pending:null});
+});
+test('different account cannot receive unsent local records',async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{
+  let calls=0;
+  cloudUser={id:'new-account',email:'new@example.invalid'};
+  localStorage.setItem(cloudOwnerKey,'original-account');
+  cloud={from:()=>{calls++;throw Error('Should not read')}};
+  await cloudSync();
+  return {calls,status:cloudMessage};
+ });
+ expect(result.calls).toBe(0);
+ expect(result.status).toContain('Anderes Konto');
+});
