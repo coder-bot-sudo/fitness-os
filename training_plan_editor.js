@@ -14,6 +14,7 @@ function planEditorReps(i,value){const ex=db.templates[selectedTemplate]?.ex?.[i
 function planEditorMove(i,delta){const a=db.templates[selectedTemplate]?.ex;if(!a||i+delta<0||i+delta>=a.length)return;[a[i],a[i+delta]]=[a[i+delta],a[i]];persist();render()}
 function planEditorRemove(i){const a=db.templates[selectedTemplate]?.ex;if(!a)return;a.splice(i,1);persist();render()}
 function planEditorAdd(){v3CatalogOpen('add-template')}
+function planEditorCreateExercise(){v3CatalogOpen('add-template');catalogCreateOpen()}
 function planEditorReplace(i){v3CatalogOpen('replace-template',i)}
 function planEditorPageHtml(){
  const t=db.templates[selectedTemplate];if(!t)return '<section class="card">Kein Plan ausgewählt.</section>';
@@ -25,7 +26,7 @@ function planEditorPageHtml(){
  '<label>Wiederholungen<input aria-label="Wiederholungen '+(i+1)+'" type="text" value="'+v3Clean(e.reps||'').replace(/"/g,'&quot;')+'" onchange="planEditorReps('+i+',this.value)" placeholder="z. B. 8–12"></label>'+
  '<label>Pause (Sek.)<input aria-label="Pausenzeit '+(i+1)+'" type="number" min="0" max="3600" value="'+Number(e.rest??90)+'" onchange="planEditorNumber('+i+',\'rest\',this.value)"></label></div>'+
  '<div class="pe-actions"><button class="btn secondary" '+(i===0?'disabled':'')+' onclick="planEditorMove('+i+',-1)">↑ Hoch</button><button class="btn secondary" '+(i===t.ex.length-1?'disabled':'')+' onclick="planEditorMove('+i+',1)">↓ Runter</button><button class="btn danger" onclick="planEditorRemove('+i+')">Entfernen</button></div></section>').join(''):'<div class="card pe-empty"><h3>Dein Plan ist noch leer</h3><p>Füge die erste Übung aus dem Katalog hinzu.</p></div>')+
- '<button class="btn pe-add" onclick="planEditorAdd()">＋ Übung hinzufügen</button></section>';
+ '<button class="btn pe-add" onclick="planEditorAdd()">＋ Übung aus Katalog hinzufügen</button><button class="btn secondary pe-add" onclick="planEditorCreateExercise()">＋ Eigene Übung erstellen</button></section>';
 }
 const planEditorOldCreate=createTemplate;
 createTemplate=function(){if(active)return;db.templates.push({id:uid(),name:'Neuer Trainingsplan',ex:[]});selectedTemplate=db.templates.length-1;persist();planEditorOpen()};
