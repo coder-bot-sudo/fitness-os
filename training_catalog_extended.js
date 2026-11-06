@@ -60,5 +60,5 @@ v3CatalogUI=function(){
  if(catalogCreating)return catalogCreateForm();
  if(catalogSelected)return catalogDetailHtml();
  const html=catalogOldUI();
- return html.replace('<div id="v3-cat-results">','<button class="btn cat-create-open" type="button" onclick="catalogCreateOpen()">＋ Eigene Übung erstellen</button><div id="v3-cat-results">');
+ return html.replace('<input placeholder="Übung suchen"','<div class="cat-new-hint"><span>Übung nicht gefunden?</span><button class="btn cat-create-open" type="button" onclick="catalogCreateOpen()">＋ Eigene Übung erstellen</button></div><input placeholder="Übung suchen"');
 };

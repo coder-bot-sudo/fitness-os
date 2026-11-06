@@ -184,3 +184,26 @@ test('custom exercise can be added during an active workout', async ({page}) => 
  expect(await page.evaluate(()=>active.ex.some(e=>e.name==='Mein Zug im Training'))).toBe(true);
  expect(await page.evaluate(()=>db.exercises.some(e=>e.name==='Mein Zug im Training'))).toBe(true);
 });
+
+test('custom exercise creation is directly available while editing a plan',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
+ await page.getByRole('button',{name:/Eigene Übung erstellen/}).click();
+ await expect(page.getByRole('heading',{name:'Eigene Übung erstellen'})).toBeVisible();
+ await page.getByRole('textbox',{name:'Name der eigenen Übung'}).fill('Seltene Spezialübung');
+ await page.getByRole('button',{name:'Übung speichern und auswählen'}).click();
+ await expect(page.locator('.pe-ex-title').filter({hasText:'Seltene Spezialübung'})).toHaveCount(1);
+});
+test('catalog shows custom exercise option before search and filters',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
+ const cta=page.locator('.cat-new-hint');
+ await expect(cta).toContainText('Übung nicht gefunden?');
+ await expect(cta.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
+ await cta.getByRole('button',{name:/Eigene Übung erstellen/}).click();
+ await expect(page.getByRole('heading',{name:'Eigene Übung erstellen'})).toBeVisible();
+});
