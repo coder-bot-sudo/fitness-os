@@ -4,6 +4,8 @@ const cloudConfig=()=>{try{return JSON.parse(localStorage.getItem('fitness_os_cl
 const cloudStatus=()=>`${cloudUser?'☁ '+cloudUser.email:'Offline'} · ${cloudMessage}`;
 function cloudToast(message){cloudMessage=message;const el=document.getElementById('cloudStatus');if(el)el.textContent=cloudStatus()}
 const cloudPendingKey='fitness_os_sync_pending';
+const cloudOwnerKey='fitness_os_cloud_owner';
+let cloudInitBusy=false,cloudAuthSubscribed=false;
 const cloudBaseKey=user=>'fitness_os_sync_base_'+user;
 const cloudCopy=value=>JSON.parse(JSON.stringify(value));
 const cloudEqual=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -52,6 +54,7 @@ function cloudMerge(base,local,remote,path='root'){
 function cloudStoreBase(snapshot,revision){
  localStorage.setItem(cloudBaseKey(cloudUser.id),JSON.stringify(snapshot));
  cloudRevision=revision;
+ localStorage.setItem(cloudOwnerKey,cloudUser.id);
 }
 function cloudSchedule(ms=800){clearTimeout(cloudTimer);if(!cloudUser)return;cloudTimer=setTimeout(()=>cloudSync(),ms)}
 function cloudMarkDirty(){
@@ -59,22 +62,50 @@ function cloudMarkDirty(){
  cloudToast(navigator.onLine?'Lokal gespeichert · synchronisiere':'Offline · lokal gespeichert');
  cloudSchedule();
 }
+async function cloudEnsureSdk(){
+ if(window.supabase)return true;
+ if(!navigator.onLine)return false;
+ return new Promise(resolve=>{
+  const script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+  script.onload=()=>resolve(Boolean(window.supabase));
+  script.onerror=()=>resolve(false);
+  document.head.appendChild(script);
+ });
+}
 async function cloudInit(){
- const cfg=cloudConfig();if(!cfg||!window.supabase)return;
+ if(cloudInitBusy)return;
+ const cfg=cloudConfig();if(!cfg)return;
+ cloudInitBusy=true;
  try{
-  cloud=window.supabase.createClient(cfg.url,cfg.key);
-  const {data,error}=await cloud.auth.getUser();if(error)throw error;
-  if(data.user){cloudUser=data.user;cloudDirty=localStorage.getItem(cloudPendingKey)==='1';await cloudSync()}
-  else cloudToast('Bitte anmelden');
-  cloud.auth.onAuthStateChange((_,session)=>{
-   const newUser=session?.user;
-   if(!newUser){cloudUser=null;cloudRevision=null;cloudToast('Abgemeldet');return}
-   if(cloudUser?.id!==newUser.id){cloudUser=newUser;cloudRevision=null;cloudSchedule(0)}
-  });
- }catch(err){cloudToast('Offline · lokale Daten bleiben erhalten')}
+  if(!await cloudEnsureSdk())return;
+  if(!cloud)cloud=window.supabase.createClient(cfg.url,cfg.key);
+  if(!cloudAuthSubscribed){
+   cloudAuthSubscribed=true;
+   cloud.auth.onAuthStateChange((_,session)=>{
+    const newUser=session?.user;
+    if(!newUser){cloudUser=null;cloudRevision=null;cloudToast('Abgemeldet');return}
+    if(cloudUser?.id!==newUser.id){cloudUser=newUser;cloudRevision=null;cloudSchedule(100)}
+   });
+  }
+  let user=null;
+  try{const {data,error}=await cloud.auth.getUser();if(!error)user=data?.user}catch{}
+  if(!user){
+   // The cached session may still be available while the phone is offline.
+   try{const {data}=await cloud.auth.getSession();user=data?.session?.user}catch{}
+  }
+  if(user){
+   cloudUser=user;
+   cloudDirty=localStorage.getItem(cloudPendingKey)==='1';
+   await cloudSync();
+  }else cloudToast('Bitte anmelden');
+ }catch{cloudToast('Offline · lokale Daten bleiben erhalten')}
+ finally{cloudInitBusy=false}
 }
 async function cloudSync(){
  if(!cloud||!cloudUser||cloudBusy||!navigator.onLine)return;
+ const owner=localStorage.getItem(cloudOwnerKey);
+ if(owner&&owner!==cloudUser.id){cloudToast('Anderes Konto erkannt · lokale Daten geschützt');return}
  cloudBusy=true;
  try{
   // Always fetch fresh revision first, including changes made on the other device.
@@ -118,9 +149,14 @@ async function cloudSync(){
    db=next;
    for(const k in defaults)if(!(k in db))db[k]=cloudCopy(defaults[k]);
    localStorage.setItem('fitness_os_v1',JSON.stringify(db));
-   if(!active&&db.activeWorkout?.ex&&db.activeWorkout?.started){
-    active=cloudCopy(db.activeWorkout);
-    localStorage.setItem('fitness_os_active_v3',JSON.stringify(active));
+   if(db.activeWorkout?.ex&&db.activeWorkout?.started){
+    if(!active||active.id===db.activeWorkout.id){
+     active=cloudCopy(db.activeWorkout);
+     localStorage.setItem('fitness_os_active_v3',JSON.stringify(active));
+    }
+   }else if(active&&cloudEqual(current.activeWorkout??null,active)){
+    active=null;
+    localStorage.removeItem('fitness_os_active_v3');
    }
    render();
   }
@@ -158,7 +194,7 @@ async function cloudLogin(e){e.preventDefault();if(!cloud)return alert('Cloud zu
 async function cloudLogout(){if(!cloud)return;await cloud.auth.signOut();cloudUser=null;cloudRevision=null;cloudDirty=localStorage.getItem(cloudPendingKey)==='1';cloudToast('Abgemeldet');render()}
 async function cloudFirstUpload(){await cloudSync()}
 function cloudPanel(){const cfg=cloudConfig();return `<section class="card"><h2>☁ Cloud-Synchronisierung</h2><p class="small" id="cloudStatus">${esc(cloudStatus())}</p>${!cfg?`<p class="small">Supabase-Projekt erstellen, cloud.sql ausführen und hier die öffentlichen Zugangsdaten eintragen.</p><form class="stack" onsubmit="cloudImportConfig(event)"><label>Konfiguration aus Safari übernehmen<textarea name="config" rows="3" placeholder="Kopierten Konfigurationstext einfügen" required></textarea></label><button class="btn">Konfiguration übernehmen</button></form><p class="small">Einmalige Übertragung aus Safari → Home-Bildschirm-App. Danach wie gewohnt anmelden.</p><p class="small">Oder manuell konfigurieren:</p><form class="stack" onsubmit="cloudConfigure(event)"><label>Project URL<input name="url" placeholder="https://projekt.supabase.co" required></label><label>Publishable / anon Key<input name="key" required placeholder="sb_publishable_… oder eyJ…"></label><button class="btn">Cloud konfigurieren</button></form>`:cloudUser?`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><p class="small">Konto: ${esc(cloudUser.email)} · Cloud Revision: ${cloudRevision??'unbekannt'}</p><div class="stack"><button class="btn secondary" onclick="cloudSync()">Erneut synchronisieren</button><button class="btn secondary" onclick="cloudLogout()">Abmelden</button></div><p class="small">Offline wird zuerst lokal gespeichert und später automatisch abgeglichen. Konflikte werden nicht still überschrieben.</p>`:`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><form class="stack" onsubmit="cloudLogin(event)"><label>E-Mail<input type="email" name="email" autocomplete="email" required></label><label>Passwort<input type="password" name="password" minlength="8" autocomplete="current-password" required></label><label>Aktion<select name="mode"><option value="login">Anmelden</option><option value="signup">Konto erstellen</option></select></label><button class="btn">Weiter</button></form><p class="small">Mit demselben Konto auf iPhone und Mac anmelden. Projekt-URL und öffentlicher Schlüssel werden pro Browser eingerichtet.</p>`}</section>`}
-window.addEventListener('online',()=>cloudSchedule(100));
+window.addEventListener('online',()=>{if(!cloudUser)cloudInit();else cloudSchedule(100)});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudSchedule(150)});
 window.addEventListener('focus',()=>cloudSchedule(150));
 setInterval(()=>{if(cloudUser&&!document.hidden)cloudSchedule(0)},30000);
