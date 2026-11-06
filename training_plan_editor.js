@@ -145,9 +145,10 @@ function planEditorDragMove(event){
  event.preventDefault();
  const list=document.getElementById('pe-list');
  const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('.pe-ex');
+ list.querySelectorAll('.pe-drop-before,.pe-drop-after').forEach(node=>node.classList.remove('pe-drop-before','pe-drop-after'));
  if(target&&target!==drag.row&&target.parentElement===list){
   const center=target.getBoundingClientRect().top+target.getBoundingClientRect().height/2;
-  list.insertBefore(drag.row,event.clientY<center?target:target.nextSibling);
+  target.classList.add(event.clientY<center?'pe-drop-before':'pe-drop-after');
  }
  const edge=48,scroll=event.clientY;
  if(scroll<edge)window.scrollBy(0,-12);
@@ -157,6 +158,7 @@ function planEditorDragEnd(event){
  const drag=planEditorDrag;if(!drag||event.pointerId!==drag.pointerId)return;
  clearTimeout(drag.timer);
  drag.row.classList.remove('pe-dragging');
+ document.querySelectorAll('.pe-drop-before,.pe-drop-after').forEach(node=>node.classList.remove('pe-drop-before','pe-drop-after'));
  drag.handle.removeAttribute('aria-grabbed');
  planEditorDrag=null;
  if(!drag.ready)return;
@@ -178,6 +180,7 @@ function planEditorDragCancel(){
  if(!planEditorDrag)return;
  clearTimeout(planEditorDrag.timer);
  planEditorDrag.row.classList.remove('pe-dragging');
+ document.querySelectorAll('.pe-drop-before,.pe-drop-after').forEach(node=>node.classList.remove('pe-drop-before','pe-drop-after'));
  planEditorDrag.handle.removeAttribute('aria-grabbed');
  planEditorDrag=null;render();
 }
