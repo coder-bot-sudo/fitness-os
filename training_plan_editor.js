@@ -74,6 +74,20 @@ function planEditorRemove(i){
  else if(planEditorExpanded!==null&&planEditorExpanded>i)planEditorExpanded--;
  persist();render();
 }
+function planEditorDelete(){
+ if(active)return;
+ const index=selectedTemplate,plan=db.templates?.[index];
+ if(!plan)return;
+ const text='Trainingsplan „'+plan.name+'“ wirklich löschen?\\n\\nDer Plan und seine Übungseinstellungen werden entfernt. Bereits abgeschlossene Trainings und ihre Statistiken bleiben erhalten.';
+ if(!confirm(text))return;
+ db.templates.splice(index,1);
+ selectedTemplate=Math.min(index,Math.max(0,db.templates.length-1));
+ planEditorExpanded=null;
+ planEditorPage=false;
+ v3Catalog=null;
+ persist();
+ render();
+}
 function planEditorAdd(){v3CatalogOpen('add-template')}
 function planEditorCreateExercise(){v3CatalogOpen('add-template');catalogCreateOpen()}
 function planEditorReplace(i){v3CatalogOpen('replace-template',i)}
@@ -114,6 +128,7 @@ function planEditorPageHtml(){
  '<p id="pe-drag-help" class="pe-help small">Zum Bearbeiten antippen. Für die Reihenfolge den Griff rechts gedrückt halten und ziehen.</p>'+
  '<div class="pe-list" id="pe-list">'+list+'</div>'+
  '<div class="pe-add-actions"><button class="btn pe-add" onclick="planEditorAdd()">＋ Übung hinzufügen</button></div>'+
+ '<section class="pe-danger-zone"><button type="button" class="pe-delete-plan" onclick="planEditorDelete()">Trainingsplan löschen</button></section>'+
  '<footer class="pe-footer"><button type="button" class="btn pe-finish" onclick="planEditorClose()">Fertig</button></footer></section>';
 }
 function planEditorHandleKey(event,i){
@@ -191,5 +206,8 @@ v3Editor=function(value){if(value)planEditorOpen();else planEditorClose()};
 showTraining=function(){
  if(!active&&v3Catalog)return v3CatalogUI();
  if(!active&&planEditorPage)return planEditorPageHtml();
+ if(!active&&!db.templates?.length&&analyticsMode==='training'){
+  return '<section class="card pe-no-plans"><h2>Keine Trainingspläne vorhanden</h2><p class="small">Erstelle einen neuen Trainingsplan, um dein nächstes Training zu beginnen.</p><button type="button" class="btn" onclick="createTemplate()">＋ Trainingsplan erstellen</button></section>';
+ }
  return planEditorPreviousShow();
 };
