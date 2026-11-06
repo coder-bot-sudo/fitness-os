@@ -101,7 +101,11 @@ test('plan editor saves details and order across reload',async ({page})=>{
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('heading',{name:'Trainingsplan bearbeiten'})).toBeVisible();
+ await expect(page.locator('#pe-plan-name')).toHaveText('QA Plan');
+ await expect(page.locator('.pe-details')).toHaveCount(0);
+ await page.getByRole('button',{name:'Trainingsname bearbeiten'}).click();
  await page.getByRole('textbox',{name:'Trainingsname'}).fill('QA Oberkörper');
+ await page.getByRole('textbox',{name:'Trainingsname'}).press('Enter');
  await page.locator('.pe-toggle').first().click();
  await page.getByRole('spinbutton',{name:'Sätze 1'}).fill('4');
  await page.getByRole('spinbutton',{name:'Sätze 1'}).blur();
@@ -109,7 +113,7 @@ test('plan editor saves details and order across reload',async ({page})=>{
  await page.reload();
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
- await expect(page.getByRole('textbox',{name:'Trainingsname'})).toHaveValue('QA Oberkörper');
+ await expect(page.locator('#pe-plan-name')).toHaveText('QA Oberkörper');
  await page.locator('.pe-toggle').first().click();
  await expect(page.getByRole('spinbutton',{name:'Sätze 1'})).toHaveValue('4');
 });
@@ -214,8 +218,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.6')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.6')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.06.7')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.7')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -453,7 +457,7 @@ test('delete plan cancellation leaves templates and history unchanged',async ({p
  const before=await page.evaluate(()=>({templates:JSON.stringify(db.templates),sessions:JSON.stringify(db.sessions)}));
  page.once('dialog',d=>d.dismiss());
  await page.getByRole('button',{name:'Trainingsplan löschen'}).click();
- await expect(page.getByRole('heading',{name:'Dein Trainingsplan'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'QA Plan'})).toBeVisible();
  const after=await page.evaluate(()=>({templates:JSON.stringify(db.templates),sessions:JSON.stringify(db.sessions)}));
  expect(after).toEqual(before);
 });
@@ -492,4 +496,36 @@ test('deleting one of multiple plans selects a valid remaining template',async (
  expect(result.names).toEqual(['QA Plan']);
  expect(result.selectedTemplate).toBe(0);
  await expect(page.getByRole('button',{name:/Plan bearbeiten/})).toBeVisible();
+});
+
+test('inline plan title edit is compact and handles Escape, empty names, blur and reload',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ const name=page.locator('#pe-plan-name'),pencil=page.getByRole('button',{name:'Trainingsname bearbeiten'});
+ await expect(name).toHaveText('QA Plan');
+ await expect(pencil).toBeVisible();
+ await expect(page.getByRole('textbox',{name:'Trainingsname'})).toBeHidden();
+ await expect(page.locator('.pe-details')).toHaveCount(0);
+ const touch=await pencil.evaluate(e=>({width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height}));
+ expect(touch.width).toBeGreaterThanOrEqual(44);
+ expect(touch.height).toBeGreaterThanOrEqual(44);
+ await pencil.click();
+ const field=page.getByRole('textbox',{name:'Trainingsname'});
+ await expect(field).toBeVisible();
+ await field.fill('Verworfen');
+ await field.press('Escape');
+ await expect(name).toHaveText('QA Plan');
+ await pencil.click();
+ await field.fill('     ');
+ await field.press('Enter');
+ await expect(name).toHaveText('QA Plan');
+ await pencil.click();
+ await field.fill('  Neuer   Titel  ');
+ await field.blur();
+ await expect(name).toHaveText('Neuer Titel');
+ await page.reload();
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.locator('#pe-plan-name')).toHaveText('Neuer Titel');
 });
