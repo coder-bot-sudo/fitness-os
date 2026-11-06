@@ -207,3 +207,12 @@ test('catalog shows custom exercise option before search and filters',async ({pa
  await cta.getByRole('button',{name:/Eigene Übung erstellen/}).click();
  await expect(page.getByRole('heading',{name:'Eigene Übung erstellen'})).toBeVisible();
 });
+
+test('release marker and versioned assets appear on iPhone',async ({page})=>{
+ await page.goto('/');
+ await expect(page.getByText('Fitness OS · v2026.11.06.2')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.2')))).toBe(true);
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
+});
