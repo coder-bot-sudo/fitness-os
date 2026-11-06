@@ -10,10 +10,16 @@ function analyticsAllSets(){
   for(const exercise of session.ex||[]){
    for(const [index,row] of (exercise.rows||[]).entries()){
     if(!row.done||row.skipped)continue;
-    const kg=Number(row.kg),reps=Number(row.reps);
+    const repLog=Array.isArray(row.repetitionLog)&&row.repetitionLog.length?row.repetitionLog:null;
+    const weights=repLog?repLog.map(x=>Number(x.weightKg)):[];
+    if(repLog&&weights.some(kg=>!Number.isFinite(kg)||kg<0))continue;
+    const kg=repLog?Math.max(...weights):Number(row.kg),reps=repLog?weights.length:Number(row.reps);
     if(!Number.isFinite(kg)||kg<0||!Number.isFinite(reps)||reps<1)continue;
+    const sameWeight=weights.every(x=>x===weights[0]);
     result.push({name:String(exercise.name||'').trim(),date,at:dateMs,index,kg,reps,
-      volume:kg*reps,e1rm:reps<=10&&kg>0?kg*(1+reps/30):null});
+      volume:repLog?weights.reduce((sum,x)=>sum+x,0):kg*reps,
+      display:repLog?repSummary(row):esc(kg)+' kg × '+reps,
+      e1rm:(!repLog||sameWeight)&&reps<=10&&kg>0?kg*(1+reps/30):null});
    }
   }
  }
@@ -82,7 +88,7 @@ function analyticsDetails(){
  '<div class="an-metrics">'+[['weight','Top-Gewicht'],['e1rm','1RM (geschätzt)'],['volume','Volumen'],['reps','Wiederholungen']].map(([m,label])=>'<button class="'+(analyticsMetric===m?'active':'')+'" onclick="analyticsSetMetric(\''+m+'\')">'+label+'</button>').join('')+'</div>'+
  '<div class="an-panel"><h3>'+metricName+'</h3>'+analyticsSpark(series,true)+(last?'<div class="an-value">Aktuell: <b>'+analyticsFormat(last.value)+' '+unit+'</b> <span class="'+(delta>0?'positive':'')+'">'+(delta>0?'+':'')+analyticsFormat(delta)+' '+unit+' seit erstem Punkt im Zeitraum</span></div>':'')+'</div>'+
  (analyticsMetric==='e1rm'?'<p class="an-note">Schätzung nach Epley, nur Sätze mit 1–10 Wiederholungen. Kein gemessener Maximalwert.</p>':'')+
- records+'<h3>Trainingshistorie</h3>'+(dates.length?dates.map(date=>'<div class="an-history"><b>'+date+'</b>'+all.filter(x=>x.date===date).map(row=>'<div><span>Satz '+(row.index+1)+'</span><strong>'+analyticsFormat(row.kg)+' kg × '+row.reps+'</strong></div>').join('')+'</div>').join(''):'<p class="an-empty">Keine Sätze in diesem Zeitraum.</p>')+'</section>';
+ records+'<h3>Trainingshistorie</h3>'+(dates.length?dates.map(date=>'<div class="an-history"><b>'+date+'</b>'+all.filter(x=>x.date===date).map(row=>'<div><span>Satz '+(row.index+1)+'</span><strong>'+row.display+'</strong></div>').join('')+'</div>').join(''):'<p class="an-empty">Keine Sätze in diesem Zeitraum.</p>')+'</section>';
 }
 showTraining=function(){
  if(active||v3Catalog)return analyticsOriginalShowTraining();

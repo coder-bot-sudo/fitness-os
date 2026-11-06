@@ -1,12 +1,188 @@
-// Cloud integration for Fitness OS. Requires HTTPS hosting and a Supabase project.
+// Offline-first cloud sync. Changes always land locally first.
 let cloud=null,cloudUser=null,cloudRevision=null,cloudDirty=false,cloudBusy=false,cloudTimer=null,cloudMessage='Nicht verbunden';
 const cloudConfig=()=>{try{return JSON.parse(localStorage.getItem('fitness_os_cloud_config')||'null')}catch{return null}};
 const cloudStatus=()=>`${cloudUser?'☁ '+cloudUser.email:'Offline'} · ${cloudMessage}`;
-function cloudToast(message){cloudMessage=message;const el=document.getElementById('cloudStatus');if(el)el.textContent=cloudStatus();}
-async function cloudInit(){const cfg=cloudConfig();if(!cfg||!window.supabase)return;try{cloud=window.supabase.createClient(cfg.url,cfg.key);const {data,error}=await cloud.auth.getUser();if(error)throw error;if(data.user){cloudUser=data.user;cloudToast('Verbunden – Daten laden');await cloudLoad(false)}else cloudToast('Bitte anmelden')}catch(err){cloudToast('Verbindungsfehler: '+err.message)}}
-function cloudMarkDirty(){if(!cloudUser)return;cloudDirty=true;cloudToast('Änderungen lokal gespeichert · Cloud ausstehend');clearTimeout(cloudTimer);cloudTimer=setTimeout(()=>cloudPush(),800)}
-async function cloudLoad(ask=true){if(!cloud||!cloudUser)return;if(cloudDirty&&ask&&!confirm('Ungesendete lokale Änderungen verwerfen und Cloud-Daten laden?'))return;try{const {data,error}=await cloud.from('fitness_states').select('payload,revision').eq('user_id',cloudUser.id).maybeSingle();if(error)throw error;if(data){const hasLocal=JSON.stringify(db)!==JSON.stringify(defaults);if((ask||hasLocal)&&!confirm('Cloud-Daten in diesen Browser übernehmen? Lokale Daten werden ersetzt. Bitte vorher JSON-Backup erstellen.')){cloudRevision=data.revision;cloudToast('Lokale Daten behalten – Cloud noch nicht geladen');return;}db=data.payload;for(const k in defaults)if(!(k in db))db[k]=structuredClone(defaults[k]);localStorage.setItem('fitness_os_v1',JSON.stringify(db));cloudRevision=data.revision;cloudDirty=false;render();cloudToast('Synchronisiert · Version '+cloudRevision)}else{cloudRevision=0;cloudToast('Cloud leer – lokale Daten können hochgeladen werden');if(ask)await cloudPush(true)}}catch(err){cloudToast('Ladefehler: '+err.message)}}
-async function cloudPush(force=false){if(!cloud||!cloudUser||cloudBusy||(!cloudDirty&&!force)||cloudRevision===null)return;cloudBusy=true;const snapshot=JSON.stringify(db),revision=cloudRevision;try{const {data,error}=await cloud.rpc('save_fitness_state',{expected_revision:revision,new_payload:JSON.parse(snapshot)});if(error)throw error;cloudRevision=data;cloudDirty=JSON.stringify(db)!==snapshot;cloudToast(cloudDirty?'Weitere lokale Änderungen warten':'Synchronisiert · Version '+data)}catch(err){cloudDirty=true;cloudToast((err.message||'Fehler').includes('SYNC_CONFLICT')?'Konflikt: anderer Gerätestand vorhanden – kein Überschreiben':'Sync fehlgeschlagen: '+err.message)}finally{cloudBusy=false;if(cloudDirty&&cloudMessage.startsWith('Weitere')){clearTimeout(cloudTimer);cloudTimer=setTimeout(()=>cloudPush(),1000)}}}
+function cloudToast(message){cloudMessage=message;const el=document.getElementById('cloudStatus');if(el)el.textContent=cloudStatus()}
+const cloudPendingKey='fitness_os_sync_pending';
+const cloudOwnerKey='fitness_os_cloud_owner';
+let cloudInitBusy=false,cloudAuthSubscribed=false;
+const cloudBaseKey=user=>'fitness_os_sync_base_'+user;
+const cloudCopy=value=>JSON.parse(JSON.stringify(value));
+function cloudEqual(a,b){
+ if(a===b)return true;
+ if(a===null||b===null||typeof a!=='object'||typeof b!=='object')return false;
+ if(Array.isArray(a)||Array.isArray(b))return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,i)=>cloudEqual(v,b[i]));
+ const ak=Object.keys(a).sort(),bk=Object.keys(b).sort();
+ return ak.length===bk.length&&ak.every((k,i)=>k===bk[i]&&cloudEqual(a[k],b[k]));
+}
+function cloudCanonical(value){
+ if(Array.isArray(value))return '['+value.map(cloudCanonical).join(',')+']';
+ if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+cloudCanonical(value[k])).join(',')+'}';
+ return JSON.stringify(value);
+}
+const cloudHasRealData=value=>value&&Object.keys(value).some(k=>!cloudEqual(value[k],defaults[k]));
+// Conflict is deliberately non-destructive: never silently overwrite both writers' changes.
+function cloudMerge(base,local,remote,path='root'){
+ if(cloudEqual(local,remote))return cloudCopy(local);
+ if(cloudEqual(local,base))return cloudCopy(remote);
+ if(cloudEqual(remote,base))return cloudCopy(local);
+ if(Array.isArray(local)&&Array.isArray(remote)){
+  const b=Array.isArray(base)?base:[];
+  const key=x=>String(x.id??'date:'+x.date);
+  const byId=arr=>arr.every(x=>x&&typeof x==='object'&&(x.id!==undefined||(path.endsWith('/weight')&&x.date!==undefined)))&&new Set(arr.map(key)).size===arr.length;
+  if(byId(local)&&byId(remote)&&byId(b)){
+   const a=new Map(b.map(x=>[key(x),x])),l=new Map(local.map(x=>[key(x),x])),r=new Map(remote.map(x=>[key(x),x]));
+   const keys=[...new Set([...a.keys(),...r.keys(),...l.keys()])],out=[];
+   for(const id of keys){
+    const old=a.get(id),lv=l.get(id),rv=r.get(id);
+    if(lv===undefined&&rv===undefined)continue;
+    if(lv===undefined||rv===undefined){
+     if(old!==undefined&&!cloudEqual(lv??null,old)&&!cloudEqual(rv??null,old))throw Error('SYNC_MERGE_CONFLICT '+path+'/'+id);
+     if(old!==undefined)continue; // deleted on one side, unchanged on the other
+     out.push(cloudCopy(lv??rv));continue;
+    }
+    out.push(cloudMerge(old,lv,rv,path+'/'+id));
+   }
+   return out;
+  }
+  const encode=cloudCanonical,bk=new Set(b.map(encode));
+  if(b.some(x=>!local.some(y=>cloudEqual(x,y))||!remote.some(y=>cloudEqual(x,y))))throw Error('SYNC_MERGE_CONFLICT '+path);
+  const out=cloudCopy(remote),present=new Set(remote.map(encode));
+  for(const x of local){const k=encode(x);if(!present.has(k)&&!bk.has(k)){out.push(cloudCopy(x));present.add(k)}}
+  return out;
+ }
+ if(local&&remote&&typeof local==='object'&&typeof remote==='object'&&!Array.isArray(local)&&!Array.isArray(remote)){
+  const out={};
+  for(const k of new Set([...Object.keys(base||{}),...Object.keys(local),...Object.keys(remote)])){
+   const lv=Object.prototype.hasOwnProperty.call(local,k)?local[k]:null,rv=Object.prototype.hasOwnProperty.call(remote,k)?remote[k]:null,bv=base?.[k]??null;
+   const value=cloudMerge(bv,lv,rv,path+'/'+k);
+   if(value!==null)out[k]=value;
+  }
+  return out;
+ }
+ throw Error('SYNC_MERGE_CONFLICT '+path);
+}
+function cloudStoreBase(snapshot,revision){
+ localStorage.setItem(cloudBaseKey(cloudUser.id),JSON.stringify(snapshot));
+ cloudRevision=revision;
+ localStorage.setItem(cloudOwnerKey,cloudUser.id);
+}
+function cloudSchedule(ms=800){clearTimeout(cloudTimer);if(!cloudUser)return;cloudTimer=setTimeout(()=>cloudSync(),ms)}
+function cloudMarkDirty(){
+ cloudDirty=true;localStorage.setItem(cloudPendingKey,'1');
+ cloudToast(navigator.onLine?'Lokal gespeichert · synchronisiere':'Offline · lokal gespeichert');
+ cloudSchedule();
+}
+async function cloudEnsureSdk(){
+ if(window.supabase)return true;
+ if(!navigator.onLine)return false;
+ return new Promise(resolve=>{
+  const script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+  script.onload=()=>resolve(Boolean(window.supabase));
+  script.onerror=()=>resolve(false);
+  document.head.appendChild(script);
+ });
+}
+async function cloudInit(){
+ if(cloudInitBusy)return;
+ const cfg=cloudConfig();if(!cfg)return;
+ cloudInitBusy=true;
+ try{
+  if(!await cloudEnsureSdk())return;
+  if(!cloud)cloud=window.supabase.createClient(cfg.url,cfg.key);
+  if(!cloudAuthSubscribed){
+   cloudAuthSubscribed=true;
+   cloud.auth.onAuthStateChange((_,session)=>{
+    const newUser=session?.user;
+    if(!newUser){cloudUser=null;cloudRevision=null;cloudToast('Abgemeldet');return}
+    if(cloudUser?.id!==newUser.id){cloudUser=newUser;cloudRevision=null;cloudSchedule(100)}
+   });
+  }
+  let user=null;
+  try{const {data,error}=await cloud.auth.getUser();if(!error)user=data?.user}catch{}
+  if(!user){
+   // The cached session may still be available while the phone is offline.
+   try{const {data}=await cloud.auth.getSession();user=data?.session?.user}catch{}
+  }
+  if(user){
+   cloudUser=user;
+   cloudDirty=localStorage.getItem(cloudPendingKey)==='1';
+   await cloudSync();
+  }else cloudToast('Bitte anmelden');
+ }catch{cloudToast('Offline · lokale Daten bleiben erhalten')}
+ finally{cloudInitBusy=false}
+}
+async function cloudSync(){
+ if(!cloud||!cloudUser||cloudBusy||!navigator.onLine)return;
+ const owner=localStorage.getItem(cloudOwnerKey);
+ if(owner&&owner!==cloudUser.id){cloudToast('Anderes Konto erkannt · lokale Daten geschützt');return}
+ cloudBusy=true;
+ try{
+  // Always fetch fresh revision first, including changes made on the other device.
+  const {data,error}=await cloud.from('fitness_states').select('payload,revision').eq('user_id',cloudUser.id).maybeSingle();
+  if(error)throw error;
+  const remote=data?.payload||cloudCopy(defaults),revision=data?.revision??0;
+  const key=cloudBaseKey(cloudUser.id);
+  let base;try{base=JSON.parse(localStorage.getItem(key)||'null')}catch{base=null}
+  const current=cloudCopy(db);
+  const pending=cloudDirty||localStorage.getItem(cloudPendingKey)==='1'||(base&&!cloudEqual(current,base));
+  if(!base){
+   // Existing devices with data and an existing cloud record have no common
+   // ancestor. Keep both unchanged rather than choosing a destructive overwrite.
+   if(data&&cloudHasRealData(current)&&!cloudEqual(current,remote)){
+    // Attempt a conservative merge for data created before this sync engine.
+    // If concurrent edits to one field cannot be reconciled, keep the local copy.
+    try{cloudMerge(defaults,current,remote)}catch{
+     cloudToast('Abgleich erforderlich: lokale und Cloud-Änderungen geschützt');
+     return;
+    }
+    cloudDirty=true;
+   }
+   base=cloudCopy(defaults);
+  }
+  const next=(pending||cloudDirty)?cloudMerge(base,current,remote):cloudCopy(remote);
+  // If local data has no base but cloud is empty, upload the local data.
+  if(!data&&cloudHasRealData(current))Object.assign(next,cloudMerge(base,current,remote));
+  if(!cloudEqual(next,remote)){
+   const snapshot=cloudCopy(next);
+   const {data:rev,error:pushError}=await cloud.rpc('save_fitness_state',{expected_revision:revision,new_payload:snapshot});
+   if(pushError)throw pushError;
+   cloudStoreBase(snapshot,rev);
+  }else cloudStoreBase(remote,revision);
+  // A user action might have happened while the network request was pending.
+  let changedDuringSync=!cloudEqual(db,current);
+  if(changedDuringSync){
+   try{db=cloudMerge(current,db,next);changedDuringSync=!cloudEqual(db,next);localStorage.setItem('fitness_os_v1',JSON.stringify(db))}
+   catch{cloudToast('Änderungen während des Abgleichs gespeichert · erneuter Versuch')}
+  }
+  if(!changedDuringSync){
+   const shouldRender=!cloudEqual(db,next);
+   db=next;
+   for(const k in defaults)if(!(k in db))db[k]=cloudCopy(defaults[k]);
+   localStorage.setItem('fitness_os_v1',JSON.stringify(db));
+   if(db.activeWorkout?.ex&&db.activeWorkout?.started){
+    if(!active||active.id===db.activeWorkout.id){
+     active=cloudCopy(db.activeWorkout);
+     localStorage.setItem('fitness_os_active_v3',JSON.stringify(active));
+    }
+   }else if(active&&cloudEqual(current.activeWorkout??null,active)){
+    active=null;
+    localStorage.removeItem('fitness_os_active_v3');
+   }
+   if(shouldRender)render();
+  }
+  cloudDirty=changedDuringSync;
+  if(cloudDirty){localStorage.setItem(cloudPendingKey,'1');cloudSchedule(1000)}
+  else localStorage.removeItem(cloudPendingKey);
+  cloudToast(cloudDirty?'Lokal gespeichert · weitere Änderungen ausstehend':'Synchronisiert');
+ }catch(err){
+  cloudDirty=true;localStorage.setItem(cloudPendingKey,'1');
+  cloudToast(String(err.message||err).includes('SYNC_MERGE_CONFLICT')?'Synchronisierungskonflikt · lokale Änderungen sicher gespeichert':'Offline/Sync-Fehler · lokal gespeichert');
+ }finally{cloudBusy=false}
+}
+async function cloudLoad(){await cloudSync()}
+async function cloudPush(){await cloudSync()}
 function cloudExportConfig(){
  const cfg=cloudConfig();
  if(!cfg)return alert('Hier ist noch keine Cloud konfiguriert.');
@@ -26,8 +202,11 @@ function cloudImportConfig(e){
  }catch(err){alert('Konfiguration konnte nicht übernommen werden. Bitte kopierten Text vollständig einfügen. '+err.message)}
 }
 function cloudConfigure(e){e.preventDefault();const f=new FormData(e.target),url=String(f.get('url')||'').trim(),key=String(f.get('key')||'').trim();if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)||!key||/service_role|sb_secret_/i.test(key)){alert('Bitte gültige Supabase Project URL und Publishable/anon Key verwenden. Niemals einen service_role/secret Key!');return}localStorage.setItem('fitness_os_cloud_config',JSON.stringify({url,key}));location.reload()}
-async function cloudLogin(e){e.preventDefault();if(!cloud)return alert('Cloud zuerst konfigurieren.');const f=new FormData(e.target),email=String(f.get('email')),password=String(f.get('password'));const signup=f.get('mode')==='signup';try{const {data,error}=await (signup?cloud.auth.signUp({email,password}):cloud.auth.signInWithPassword({email,password}));if(error)throw error;if(!data.session){alert('Registriert. Bitte ggf. E-Mail bestätigen und danach anmelden.');return}cloudUser=data.user;cloudDirty=false;cloudRevision=null;cloudToast('Angemeldet');await cloudLoad(false)}catch(err){alert('Anmeldung fehlgeschlagen: '+err.message)}}
-async function cloudLogout(){if(!cloud)return;await cloud.auth.signOut();cloudUser=null;cloudRevision=null;cloudDirty=false;cloudToast('Abgemeldet');render()}
-async function cloudFirstUpload(){if(!cloudUser)return;const {data,error}=await cloud.from('fitness_states').select('revision').eq('user_id',cloudUser.id).maybeSingle();if(error)return alert(error.message);if(data)return alert('Cloud enthält bereits Daten. Bitte erst Cloud laden; kein blindes Überschreiben.');if(!confirm('Lokalen Datenbestand als ersten Cloud-Stand hochladen?'))return;cloudRevision=0;cloudDirty=true;await cloudPush(true)}
-function cloudPanel(){const cfg=cloudConfig();return `<section class="card"><h2>☁ Cloud-Synchronisierung</h2><p class="small" id="cloudStatus">${esc(cloudStatus())}</p>${!cfg?`<p class="small">Supabase-Projekt erstellen, cloud.sql ausführen und hier die öffentlichen Zugangsdaten eintragen.</p><form class="stack" onsubmit="cloudImportConfig(event)"><label>Konfiguration aus Safari übernehmen<textarea name="config" rows="3" placeholder="Kopierten Konfigurationstext einfügen" required></textarea></label><button class="btn">Konfiguration übernehmen</button></form><p class="small">Einmalige Übertragung aus Safari → Home-Bildschirm-App. Danach wie gewohnt anmelden.</p><p class="small">Oder manuell konfigurieren:</p><form class="stack" onsubmit="cloudConfigure(event)"><label>Project URL<input name="url" placeholder="https://projekt.supabase.co" required></label><label>Publishable / anon Key<input name="key" required placeholder="sb_publishable_… oder eyJ…"></label><button class="btn">Cloud konfigurieren</button></form>`:cloudUser?`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><p class="small">Konto: ${esc(cloudUser.email)} · Cloud Revision: ${cloudRevision??'unbekannt'}</p><div class="stack"><button class="btn" onclick="cloudLoad(true)">Cloud-Daten laden</button><button class="btn secondary" onclick="cloudPush(true)">Jetzt synchronisieren</button>${cloudRevision===0?'<button class="btn secondary" onclick="cloudFirstUpload()">Lokale Daten erstmalig hochladen</button>':''}<button class="btn secondary" onclick="cloudLogout()">Abmelden</button></div><p class="small">Konflikte werden nicht automatisch überschrieben. Vor dem Laden ein JSON-Backup sichern.</p>`:`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><form class="stack" onsubmit="cloudLogin(event)"><label>E-Mail<input type="email" name="email" autocomplete="email" required></label><label>Passwort<input type="password" name="password" minlength="8" autocomplete="current-password" required></label><label>Aktion<select name="mode"><option value="login">Anmelden</option><option value="signup">Konto erstellen</option></select></label><button class="btn">Weiter</button></form><p class="small">Mit demselben Konto auf iPhone und Mac anmelden. Projekt-URL und öffentlicher Schlüssel werden pro Browser eingerichtet.</p>`}</section>`}
-window.addEventListener('online',()=>{if(cloudDirty)cloudPush();});
+async function cloudLogin(e){e.preventDefault();if(!cloud)return alert('Cloud zuerst konfigurieren.');const f=new FormData(e.target),email=String(f.get('email')),password=String(f.get('password'));const signup=f.get('mode')==='signup';try{const {data,error}=await (signup?cloud.auth.signUp({email,password}):cloud.auth.signInWithPassword({email,password}));if(error)throw error;if(!data.session){alert('Registriert. Bitte ggf. E-Mail bestätigen und danach anmelden.');return}cloudUser=data.user;cloudRevision=null;cloudToast('Angemeldet');await cloudSync()}catch(err){alert('Anmeldung fehlgeschlagen: '+err.message)}}
+async function cloudLogout(){if(!cloud)return;await cloud.auth.signOut();cloudUser=null;cloudRevision=null;cloudDirty=localStorage.getItem(cloudPendingKey)==='1';cloudToast('Abgemeldet');render()}
+async function cloudFirstUpload(){await cloudSync()}
+function cloudPanel(){const cfg=cloudConfig();return `<section class="card"><h2>☁ Cloud-Synchronisierung</h2><p class="small" id="cloudStatus">${esc(cloudStatus())}</p>${!cfg?`<p class="small">Supabase-Projekt erstellen, cloud.sql ausführen und hier die öffentlichen Zugangsdaten eintragen.</p><form class="stack" onsubmit="cloudImportConfig(event)"><label>Konfiguration aus Safari übernehmen<textarea name="config" rows="3" placeholder="Kopierten Konfigurationstext einfügen" required></textarea></label><button class="btn">Konfiguration übernehmen</button></form><p class="small">Einmalige Übertragung aus Safari → Home-Bildschirm-App. Danach wie gewohnt anmelden.</p><p class="small">Oder manuell konfigurieren:</p><form class="stack" onsubmit="cloudConfigure(event)"><label>Project URL<input name="url" placeholder="https://projekt.supabase.co" required></label><label>Publishable / anon Key<input name="key" required placeholder="sb_publishable_… oder eyJ…"></label><button class="btn">Cloud konfigurieren</button></form>`:cloudUser?`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><p class="small">Konto: ${esc(cloudUser.email)} · Cloud Revision: ${cloudRevision??'unbekannt'}</p><div class="stack"><button class="btn secondary" onclick="cloudSync()">Erneut synchronisieren</button><button class="btn secondary" onclick="cloudLogout()">Abmelden</button></div><p class="small">Offline wird zuerst lokal gespeichert und später automatisch abgeglichen. Konflikte werden nicht still überschrieben.</p>`:`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><form class="stack" onsubmit="cloudLogin(event)"><label>E-Mail<input type="email" name="email" autocomplete="email" required></label><label>Passwort<input type="password" name="password" minlength="8" autocomplete="current-password" required></label><label>Aktion<select name="mode"><option value="login">Anmelden</option><option value="signup">Konto erstellen</option></select></label><button class="btn">Weiter</button></form><p class="small">Mit demselben Konto auf iPhone und Mac anmelden. Projekt-URL und öffentlicher Schlüssel werden pro Browser eingerichtet.</p>`}</section>`}
+window.addEventListener('online',()=>{if(!cloudUser)cloudInit();else cloudSchedule(100)});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudSchedule(150)});
+window.addEventListener('focus',()=>cloudSchedule(150));
+setInterval(()=>{if(cloudUser&&!document.hidden)cloudSchedule(0)},30000);

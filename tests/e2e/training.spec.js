@@ -210,9 +210,129 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.2')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.2')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.06.3')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.3')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
+});
+
+test('per repetition weight changes, undo, correction, reload and volume',async ({page})=>{
+ await page.addInitScript(({running})=>{if(sessionStorage.getItem('qa-running-set'))return;sessionStorage.setItem('qa-running-set','1');localStorage.setItem('fitness_os_active_v3',JSON.stringify(running))},{running});
+ await page.goto('/');
+ await expect(page.getByRole('button',{name:/Wiederholung bestätigen/})).toBeVisible();
+ await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
+ await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
+ await page.locator('#v3-kg').fill('50');
+ await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([65,65,50]);
+ await page.getByRole('button',{name:/Letzte Wiederholung zurücknehmen/}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([65,65]);
+ page.once('dialog',d=>d.accept('55'));
+ await page.getByRole('button',{name:/Wiederholung 1 korrigieren/}).click();
+ await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([55,65,50]);
+ await page.reload();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([55,65,50]);
+ await page.getByRole('button',{name:/Satz abschließen/}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].done)).toBe(true);
+ await page.evaluate(()=>endWorkout());
+ const sets=await page.evaluate(()=>analyticsAllSets().filter(r=>r.name==='Bankdrücken'));
+ expect(sets.some(r=>r.reps===3&&r.volume===170&&r.kg===65&&r.e1rm===null)).toBe(true);
+ expect(sets.some(r=>r.reps===8&&r.volume===480&&r.kg===60)).toBe(true);
+});
+test('offline changes persist and safe cloud merge combines independent completed workouts',async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{
+  const one={id:'local-1',date:'2026-11-06',name:'iPhone',ex:[]};
+  const two={id:'remote-1',date:'2026-11-06',name:'Mac',ex:[]};
+  const base=structuredClone(defaults);
+  db=structuredClone(base);db.sessions.push(one);persist();
+  const remote=structuredClone(base);remote.sessions.push(two);
+  localStorage.setItem(cloudBaseKey('qa-user'),JSON.stringify(base));
+  cloudUser={id:'qa-user',email:'qa@example.invalid'};
+  let saved=null;cloud={
+    from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{payload:remote,revision:4},error:null})})})}),
+    rpc:async(_,args)=>{saved=args.new_payload;return {data:5,error:null}}
+  };
+  await cloudSync();
+  return {sessions:db.sessions.map(x=>x.id),pushed:saved?.sessions.map(x=>x.id),pending:localStorage.getItem(cloudPendingKey),revision:cloudRevision};
+ });
+ expect(result.sessions).toEqual(expect.arrayContaining(['local-1','remote-1']));
+ expect(result.pushed).toEqual(expect.arrayContaining(['local-1','remote-1']));
+ expect(result.pending).toBeNull();
+ expect(result.revision).toBe(5);
+});
+test('simultaneous edits to the same record are not silently overwritten',async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(()=>{
+  const base={templates:[{id:1,name:'Original',ex:[]}]};
+  const local={templates:[{id:1,name:'iPhone edit',ex:[]}]};
+  const remote={templates:[{id:1,name:'Mac edit',ex:[]}]};
+  try{cloudMerge(base,local,remote);return 'overwritten'}catch(e){return e.message}
+ });
+ expect(result).toContain('SYNC_MERGE_CONFLICT');
+});
+
+test('supabase jsonb key order changes do not trigger false merge conflicts', async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(()=>{
+  const a={id:'entry',name:'Workout',meta:{weight:50,reps:2}};
+  const b={meta:{reps:2,weight:50},name:'Workout',id:'entry'};
+  return {
+   equals:cloudEqual(a,b),
+   canonical:cloudCanonical(a)===cloudCanonical(b),
+   merge:cloudMerge({rows:[a]},{rows:[a]},{rows:[b]}).rows.length
+  };
+ });
+ expect(result).toEqual({equals:true,canonical:true,merge:1});
+});
+test('offline save remains local until connection is restored', async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{
+  db=structuredClone(defaults);
+  const session={id:'offline-1',date:'2026-11-06',name:'Offline',ex:[]};
+  let pushed=null;
+  cloudUser={id:'qa-offline-user',email:'test@example.invalid'};
+  cloud={
+   from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:null})})})}),
+   rpc:async(_,args)=>{pushed=args.new_payload;return {data:1,error:null}}
+  };
+  Object.defineProperty(navigator,'onLine',{value:false,configurable:true});
+  db.sessions.push(session);persist();
+  await cloudSync();
+  const localSaved=JSON.parse(localStorage.getItem('fitness_os_v1')).sessions.some(x=>x.id==='offline-1');
+  const queued=localStorage.getItem(cloudPendingKey)==='1';
+  Object.defineProperty(navigator,'onLine',{value:true,configurable:true});
+  await cloudSync();
+  return {localSaved,queued,pushed:Boolean(pushed?.sessions.some(x=>x.id==='offline-1')),remaining:localStorage.getItem(cloudPendingKey)};
+ });
+ expect(result).toEqual({localSaved:true,queued:true,pushed:true,remaining:null});
+});
+test('cloud updates arrive automatically without a confirmation dialog',async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{
+  db=structuredClone(defaults);
+  localStorage.removeItem(cloudPendingKey);
+  const remote=structuredClone(defaults);
+  remote.sessions.push({id:'other-device',name:'Mac Session',date:'2026-11-06',ex:[]});
+  cloudUser={id:'qa-remote-user',email:'test@example.invalid'};
+  cloud={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{payload:remote,revision:8},error:null})})})}),rpc:async()=>{throw Error('No upload expected')}};
+  await cloudSync();
+  return {ids:db.sessions.map(x=>x.id),revision:cloudRevision,pending:localStorage.getItem(cloudPendingKey)};
+ });
+ expect(result).toEqual({ids:['other-device'],revision:8,pending:null});
+});
+test('different account cannot receive unsent local records',async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{
+  let calls=0;
+  cloudUser={id:'new-account',email:'new@example.invalid'};
+  localStorage.setItem(cloudOwnerKey,'original-account');
+  cloud={from:()=>{calls++;throw Error('Should not read')}};
+  await cloudSync();
+  return {calls,status:cloudMessage};
+ });
+ expect(result.calls).toBe(0);
+ expect(result.status).toContain('Anderes Konto');
 });
