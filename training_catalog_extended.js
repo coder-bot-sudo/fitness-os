@@ -8,7 +8,7 @@ function catalogDetailOpen(name){catalogSelected=name;render()}
 function catalogDetailBack(){catalogSelected=null;render()}
 function catalogDetailHtml(){
  const item=v3List().find(x=>x[0]===catalogSelected);if(!item)return '';
- return '<section class="v3-cat card cat-detail"><button type="button" class="btn secondary" onclick="catalogDetailBack()">← Zur Übungsauswahl</button><h2>'+v3Clean(item[0])+'</h2><p>'+v3Clean(item[1])+' · '+v3Clean(item[2])+'</p><button class="btn cat-select" onclick="v3Choose('+JSON.stringify(item[0]).replace(/"/g,'&quot;')+')">'+(v3Catalog?.mode?.includes("replace")?'Übung austauschen':'Übung hinzufügen')+'</button></section>';
+ return '<section class="v3-cat card cat-detail"><button type="button" class="btn secondary" onclick="catalogDetailBack()">← Zur Übungsauswahl</button><h2>'+v3Clean(item[0])+'</h2><p>'+v3Clean(item[1])+' · '+v3Clean(item[2])+'</p>'+(v3Catalog?.mode==='browse'?'<button type="button" class="btn cat-select" onclick="v3CatalogClose()">Fertig</button>':'<button class="btn cat-select" onclick="v3Choose('+JSON.stringify(item[0]).replace(/"/g,'&quot;')+')">'+(v3Catalog?.mode?.includes("replace")?'Übung austauschen':'Übung hinzufügen')+'</button>')+'</section>';
 }
 function catalogCard(x){
  return '<button type="button" class="v3-cat-item cat-picture" onclick="catalogDetailOpen('+JSON.stringify(x[0]).replace(/"/g,'&quot;')+')"><span class="cat-text"><b>'+v3Clean(x[0])+'</b><small>'+v3Clean(x[1])+' · '+v3Clean(x[2])+'</small></span><span aria-hidden="true">›</span></button>';
@@ -30,6 +30,13 @@ v3List=function(){
 };
 function catalogCreateOpen(){catalogSelected=null;catalogCreating=true;render()}
 function catalogCreateBack(){catalogCreating=false;render()}
+function catalogCreateStandalone(){
+ if(active)return;
+ v3CatalogOpen('browse');
+ catalogCreateOpen();
+}
+const catalogOriginalClose=v3CatalogClose;
+v3CatalogClose=function(){catalogCreating=false;catalogSelected=null;catalogOriginalClose()};
 function catalogCreateForm(){
  const groups=['Brust','Rücken','Schultern','Beine','Arme','Core','Weitere'];
  const equipment=['Kurzhantel','Langhantel','Maschine','Kabel','Körpergewicht','Unbekannt'];
@@ -51,7 +58,10 @@ function catalogCreateSubmit(event){
  persist();
  catalogCreating=false;
  catalogSelected=null;
- v3Choose(name);
+ if(v3Catalog?.mode==='browse'){
+  catalogSelected=name;
+  render();
+ }else v3Choose(name);
 }
 const catalogOldOpen=v3CatalogOpen;
 v3CatalogOpen=function(mode,index=-1){catalogSelected=null;catalogCreating=false;catalogOldOpen(mode,index)};
@@ -61,4 +71,11 @@ v3CatalogUI=function(){
  if(catalogSelected)return catalogDetailHtml();
  const html=catalogOldUI();
  return html.replace('<div id="v3-cat-results">','<button class="btn cat-create-open" type="button" onclick="catalogCreateOpen()">＋ Eigene Übung erstellen</button><div id="v3-cat-results">');
+};
+
+const catalogPriorShowTraining=showTraining;
+showTraining=function(){
+ const content=catalogPriorShowTraining();
+ if(active||v3Catalog||planEditorPage||analyticsMode!=='training')return content;
+ return '<section class="card cat-standalone-entry"><div><h2>Eigene Übungen</h2><p class="small">Fehlt eine Übung im Katalog? Erstelle sie mit Namen, Muskelgruppe und Equipment.</p></div><button type="button" class="btn" onclick="catalogCreateStandalone()">＋ Eigene Übung erstellen</button></section>'+content;
 };
