@@ -218,7 +218,7 @@ test('release marker and versioned assets appear on iPhone',async ({page})=>{
 });
 
 test('per repetition weight changes, undo, correction, reload and volume',async ({page})=>{
- await page.addInitScript(({running})=>localStorage.setItem('fitness_os_active_v3',JSON.stringify(running)),{running});
+ await page.addInitScript(({running})=>{if(sessionStorage.getItem('qa-running-set'))return;sessionStorage.setItem('qa-running-set','1');localStorage.setItem('fitness_os_active_v3',JSON.stringify(running))},{running});
  await page.goto('/');
  await expect(page.getByRole('button',{name:/Wiederholung bestätigen/})).toBeVisible();
  await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
