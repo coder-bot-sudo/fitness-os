@@ -11,6 +11,7 @@ function liveDiscard(){
  v3Catalog=null;
  liveMenuOpen=false;
  localStorage.removeItem('fitness_os_active_v3');
+ db.activeWorkout=null;persist();
  document.title='Fitness OS · MVP';
  route='training';
  render();
