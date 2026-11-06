@@ -60,3 +60,13 @@
 .pe-no-plans{display:grid;gap:12px;max-width:640px;margin:16px auto}
 .pe-no-plans h2,.pe-no-plans p{margin:0}
 .pe-no-plans button{min-height:48px}
+
+/* Plan name is the only prominent title; rename remains discreet until requested. */
+.pe-title-row{display:flex;align-items:center;gap:6px;min-width:0}
+.pe-title-row h2{font-size:clamp(20px,4vw,26px);font-weight:750;line-height:1.2;margin:0;min-width:0;overflow-wrap:anywhere}
+.pe-rename-button{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;padding:0;color:#adc6e9;background:transparent;border:0;border-radius:11px;touch-action:manipulation;cursor:pointer}
+.pe-rename-button:hover{color:#fff;background:#223a59}
+.pe-rename-button:focus-visible,.pe-name-input:focus-visible{outline:3px solid #9ac9ff;outline-offset:2px}
+.pe-name-input{flex:1;min-width:0;max-width:550px;min-height:44px;padding:8px 11px;border:1px solid #5f8bc3;border-radius:9px;background:#12233a;color:#f1f5ff;font-size:21px;font-weight:700}
+.pe-name-input[hidden],.pe-title-row h2[hidden],.pe-rename-button[hidden]{display:none}
+.pe-intro{margin-bottom:20px}
