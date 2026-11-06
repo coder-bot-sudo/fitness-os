@@ -38,6 +38,32 @@ render=function(){planEditorPreviousRender();planEditorHeader()};
 function planEditorSetName(value){
  const t=db.templates[selectedTemplate];if(!t)return;t.name=value;persist();
 }
+function planEditorStartRename(){
+ const title=document.getElementById('pe-plan-name');
+ const field=document.getElementById('pe-plan-name-input');
+ const button=document.getElementById('pe-rename-button');
+ if(!title||!field||!button)return;
+ field.value=db.templates[selectedTemplate]?.name||'';
+ title.hidden=true;button.hidden=true;field.hidden=false;
+ field.focus();field.select();
+}
+function planEditorFinishRename(save=true){
+ const title=document.getElementById('pe-plan-name');
+ const field=document.getElementById('pe-plan-name-input');
+ const button=document.getElementById('pe-rename-button');
+ if(!title||!field||!button||field.hidden)return;
+ const plan=db.templates[selectedTemplate];
+ if(save&&plan){
+  const name=field.value.trim().replace(/\\s+/g,' ').slice(0,80);
+  if(name&&name!==plan.name){planEditorSetName(name)}
+ }
+ title.textContent=plan?.name||'Trainingsplan';
+ title.hidden=false;button.hidden=false;field.hidden=true;
+}
+function planEditorRenameKey(event){
+ if(event.key==='Enter'){event.preventDefault();planEditorFinishRename(true);document.getElementById('pe-rename-button')?.focus()}
+ if(event.key==='Escape'){event.preventDefault();planEditorFinishRename(false);document.getElementById('pe-rename-button')?.focus()}
+}
 function planEditorNumber(i,key,value){
  const ex=db.templates[selectedTemplate]?.ex?.[i];if(!ex)return;
  const num=Number(value);if(!Number.isFinite(num))return;
@@ -122,8 +148,10 @@ function planEditorCard(e,i,total){
 function planEditorPageHtml(){
  const t=db.templates[selectedTemplate];if(!t)return '<section class="card">Kein Plan ausgewählt.</section>';
  const list=t.ex.length?t.ex.map((e,i)=>planEditorCard(e,i,t.ex.length)).join(''):'<div class="card pe-empty"><h3>Dein Plan ist noch leer</h3><p>Füge deine erste Übung hinzu oder erstelle eine eigene.</p></div>';
- return '<section class="pe-page"><div class="pe-intro"><h2>Dein Trainingsplan</h2><p class="small">Änderungen werden automatisch gespeichert.</p></div>'+
- '<section class="card pe-details"><label>Trainingsname<input aria-label="Trainingsname" maxlength="80" value="'+v3Clean(t.name).replace(/"/g,'&quot;')+'" oninput="planEditorSetName(this.value)" placeholder="z. B. Oberkörper A"></label><div class="small">'+t.ex.length+' Übungen in deinem Plan</div></section>'+
+ return '<section class="pe-page"><div class="pe-intro">'+
+ '<div class="pe-title-row"><h2 id="pe-plan-name">'+v3Clean(t.name)+'</h2><button type="button" class="pe-rename-button" id="pe-rename-button" aria-label="Trainingsname bearbeiten" title="Trainingsname bearbeiten" onclick="planEditorStartRename()"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button>'+
+ '<input id="pe-plan-name-input" class="pe-name-input" type="text" maxlength="80" aria-label="Trainingsname" value="'+v3Clean(t.name).replace(/"/g,'&quot;')+'" onkeydown="planEditorRenameKey(event)" onblur="planEditorFinishRename(true)" hidden></div>'+
+ '<p class="small">Änderungen werden automatisch gespeichert.</p></div>'+
  '<div class="pe-section"><h3>Übungen</h3><span class="small">'+t.ex.length+' insgesamt</span></div>'+
  '<p id="pe-drag-help" class="pe-help small">Zum Bearbeiten antippen. Für die Reihenfolge den Griff rechts gedrückt halten und ziehen.</p>'+
  '<div class="pe-list" id="pe-list">'+list+'</div>'+
