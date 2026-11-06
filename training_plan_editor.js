@@ -108,7 +108,7 @@ function planEditorCard(e,i,total){
 function planEditorPageHtml(){
  const t=db.templates[selectedTemplate];if(!t)return '<section class="card">Kein Plan ausgewählt.</section>';
  const list=t.ex.length?t.ex.map((e,i)=>planEditorCard(e,i,t.ex.length)).join(''):'<div class="card pe-empty"><h3>Dein Plan ist noch leer</h3><p>Füge deine erste Übung hinzu oder erstelle eine eigene.</p></div>';
- return '<section class="pe-page"><div class="pe-intro"><h2>Trainingsplan bearbeiten</h2><p class="small">Änderungen werden automatisch gespeichert.</p></div>'+
+ return '<section class="pe-page"><div class="pe-intro"><h2>Dein Trainingsplan</h2><p class="small">Änderungen werden automatisch gespeichert.</p></div>'+
  '<section class="card pe-details"><label>Trainingsname<input aria-label="Trainingsname" maxlength="80" value="'+v3Clean(t.name).replace(/"/g,'&quot;')+'" oninput="planEditorSetName(this.value)" placeholder="z. B. Oberkörper A"></label><div class="small">'+t.ex.length+' Übungen in deinem Plan</div></section>'+
  '<div class="pe-section"><h3>Übungen</h3><span class="small">'+t.ex.length+' insgesamt</span></div>'+
  '<p id="pe-drag-help" class="pe-help small">Zum Bearbeiten antippen. Für die Reihenfolge den Griff rechts gedrückt halten und ziehen.</p>'+
