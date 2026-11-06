@@ -214,8 +214,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.5')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.5')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.06.6')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.6')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -443,4 +443,53 @@ test('sticky finish footer has no safe-area gap or gradient',async ({page})=>{
  expect(style.height).toBeGreaterThanOrEqual(64);
  await expect(page.locator('.pe-add-actions').getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
  await expect(page.locator('.pe-footer').getByRole('button',{name:'Fertig'})).toBeVisible();
+});
+
+test('delete plan cancellation leaves templates and history unchanged',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.getByRole('button',{name:'Trainingsplan löschen'})).toBeVisible();
+ const before=await page.evaluate(()=>({templates:JSON.stringify(db.templates),sessions:JSON.stringify(db.sessions)}));
+ page.once('dialog',d=>d.dismiss());
+ await page.getByRole('button',{name:'Trainingsplan löschen'}).click();
+ await expect(page.getByRole('heading',{name:'Dein Trainingsplan'})).toBeVisible();
+ const after=await page.evaluate(()=>({templates:JSON.stringify(db.templates),sessions:JSON.stringify(db.sessions)}));
+ expect(after).toEqual(before);
+});
+test('delete plan preserves workout history and allows recovery from empty templates',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ const oldHistory=await page.evaluate(()=>JSON.stringify(db.sessions));
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ page.once('dialog',async d=>{
+  expect(d.message()).toContain('QA Plan');
+  expect(d.message()).toContain('Bereits abgeschlossene Trainings');
+  await d.accept();
+ });
+ await page.getByRole('button',{name:'Trainingsplan löschen'}).click();
+ await expect(page.getByRole('heading',{name:'Keine Trainingspläne vorhanden'})).toBeVisible();
+ expect(await page.evaluate(()=>db.templates.length)).toBe(0);
+ expect(await page.evaluate(()=>JSON.stringify(db.sessions))).toBe(oldHistory);
+ await page.reload();
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await expect(page.getByRole('heading',{name:'Keine Trainingspläne vorhanden'})).toBeVisible();
+ await page.getByRole('button',{name:/Trainingsplan erstellen/}).click();
+ await expect(page.getByRole('heading',{name:'Trainingsplan bearbeiten'})).toBeVisible();
+ expect(await page.evaluate(()=>db.templates.length)).toBe(1);
+});
+test('deleting one of multiple plans selects a valid remaining template',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.templates.push({id:'second-plan',name:'Zweiter Plan',ex:[]});
+  selectedTemplate=1;persist();render();
+ });
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ page.once('dialog',d=>d.accept());
+ await page.getByRole('button',{name:'Trainingsplan löschen'}).click();
+ const result=await page.evaluate(()=>({names:db.templates.map(x=>x.name),selectedTemplate,history:db.sessions.length}));
+ expect(result.names).toEqual(['QA Plan']);
+ expect(result.selectedTemplate).toBe(0);
+ await expect(page.getByRole('button',{name:/Plan bearbeiten/})).toBeVisible();
 });
