@@ -149,12 +149,12 @@ test('custom exercise is created in plan editor and survives reload with categor
  await page.getByRole('combobox',{name:'Muskelgruppe der eigenen Übung'}).selectOption('Rücken');
  await page.getByRole('combobox',{name:'Equipment der eigenen Übung'}).selectOption('Kabel');
  await page.getByRole('button',{name:'Übung speichern und auswählen'}).click();
- await expect(page.locator('.pe-ex-title')).toContainText('Mein Kabelzug');
+ await expect(page.locator('.pe-ex-title').filter({hasText:'Mein Kabelzug'})).toHaveCount(1);
  expect(await page.evaluate(()=>db.exercises.find(e=>e.name==='Mein Kabelzug'))).toMatchObject({muscle:'Rücken',equipment:'Kabel',custom:true});
  await page.reload();
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
- await expect(page.locator('.pe-ex-title')).toContainText('Mein Kabelzug');
+ await expect(page.locator('.pe-ex-title').filter({hasText:'Mein Kabelzug'})).toHaveCount(1);
  await page.getByRole('button',{name:/Übung hinzufügen/}).click();
  await page.getByRole('textbox',{name:'Übung suchen'}).fill('Mein Kabelzug');
  await expect(page.getByRole('button',{name:/Mein Kabelzug/})).toContainText('Rücken · Kabel');
