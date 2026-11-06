@@ -18,7 +18,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm install --no-audit --no-fund
-      - run: npx playwright install --with-deps chromium
+      - name: Install browser with bounded retry
+        run: |
+          timeout 240s npx playwright install --with-deps chromium ||
+          (echo "Browser installation stalled; retrying once" && timeout 240s npx playwright install --with-deps chromium)
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: always()

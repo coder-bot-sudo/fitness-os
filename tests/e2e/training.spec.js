@@ -218,8 +218,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.7')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.7')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.06.8')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.8')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -528,4 +528,26 @@ test('inline plan title edit is compact and handles Escape, empty names, blur an
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.locator('#pe-plan-name')).toHaveText('Neuer Titel');
+});
+
+test('editor has one filled primary action and outlined add exercise button',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ const add=page.locator('.pe-add-actions').getByRole('button',{name:/Übung hinzufügen/});
+ const finish=page.locator('.pe-footer').getByRole('button',{name:'Fertig'});
+ await expect(add).toBeVisible();
+ await expect(finish).toBeVisible();
+ const state=await page.evaluate(()=>{
+  const add=document.querySelector('.pe-add-outline'),finish=document.querySelector('.pe-finish');
+  const a=getComputedStyle(add),f=getComputedStyle(finish);
+  return {addBg:a.backgroundColor,addBorder:a.borderTopStyle,addHeight:add.getBoundingClientRect().height,finishBg:f.backgroundColor,primaryCount:document.querySelectorAll('.pe-page .pe-add-actions .btn, .pe-page .pe-footer .btn').length};
+ });
+ expect(state.addBg).toBe('rgba(0, 0, 0, 0)');
+ expect(state.addBorder).toBe('solid');
+ expect(state.addHeight).toBeGreaterThanOrEqual(44);
+ expect(state.finishBg).not.toBe(state.addBg);
+ expect(state.primaryCount).toBe(1);
+ await add.click();
+ await expect(page.getByRole('heading',{name:'Übung auswählen'})).toBeVisible();
 });
