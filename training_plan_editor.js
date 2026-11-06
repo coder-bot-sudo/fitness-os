@@ -31,7 +31,7 @@ function planEditorHeader(){
   button.textContent='←';button.onclick=planEditorBack;
   top.insertBefore(button,top.firstChild);
   const title=document.getElementById('title');
-  if(title)title.textContent=v3Catalog?'Übung auswählen':'Trainingsplan bearbeiten';
+  if(title)title.textContent=v3Catalog?'Katalog':'Trainingsplan bearbeiten';
  }
 }
 render=function(){planEditorPreviousRender();planEditorHeader()};
