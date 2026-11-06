@@ -155,7 +155,7 @@ function planEditorPageHtml(){
  '<div class="pe-section"><h3>Übungen</h3><span class="small">'+t.ex.length+' insgesamt</span></div>'+
  '<p id="pe-drag-help" class="pe-help small">Zum Bearbeiten antippen. Für die Reihenfolge den Griff rechts gedrückt halten und ziehen.</p>'+
  '<div class="pe-list" id="pe-list">'+list+'</div>'+
- '<div class="pe-add-actions"><button class="btn pe-add" onclick="planEditorAdd()">＋ Übung hinzufügen</button></div>'+
+ '<div class="pe-add-actions"><button class="pe-add pe-add-outline" type="button" onclick="planEditorAdd()">＋ Übung hinzufügen</button></div>'+
  '<section class="pe-danger-zone"><button type="button" class="pe-delete-plan" onclick="planEditorDelete()">Trainingsplan löschen</button></section>'+
  '<footer class="pe-footer"><button type="button" class="btn pe-finish" onclick="planEditorClose()">Fertig</button></footer></section>';
 }
