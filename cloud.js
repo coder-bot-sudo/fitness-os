@@ -15,9 +15,9 @@ function cloudMerge(base,local,remote,path='root'){
  if(cloudEqual(remote,base))return cloudCopy(local);
  if(Array.isArray(local)&&Array.isArray(remote)){
   const b=Array.isArray(base)?base:[];
-  const byId=arr=>arr.every(x=>x&&typeof x==='object'&&(x.id!==undefined||x.date!==undefined));
+  const key=x=>String(x.id??'date:'+x.date);
+  const byId=arr=>arr.every(x=>x&&typeof x==='object'&&(x.id!==undefined||(path.endsWith('/weight')&&x.date!==undefined)))&&new Set(arr.map(key)).size===arr.length;
   if(byId(local)&&byId(remote)&&byId(b)){
-   const key=x=>String(x.id??'date:'+x.date);
    const a=new Map(b.map(x=>[key(x),x])),l=new Map(local.map(x=>[key(x),x])),r=new Map(remote.map(x=>[key(x),x]));
    const keys=[...new Set([...a.keys(),...r.keys(),...l.keys()])],out=[];
    for(const id of keys){
