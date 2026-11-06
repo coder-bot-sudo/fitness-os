@@ -49,3 +49,5 @@
 .pe-finish{display:block;width:100%;min-height:52px;font-size:16px}
 @media(max-width:650px){.pe-editing .main{padding:17px 13px 16px}.pe-editing .top{margin-bottom:17px}.pe-editing .top h1{font-size:19px}.pe-intro h2{font-size:19px}.pe-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.pe-fields label:last-child{grid-column:1/-1}.pe-panel{padding:4px 12px 14px}.pe-toggle{padding-left:10px;gap:9px}.pe-handle{width:48px;min-width:48px}.pe-footer{margin-left:-4px;margin-right:-4px}}
 @media(prefers-reduced-motion:reduce){.pe-ex{transition:none}}
+
+.pe-ex.pe-drop-before{box-shadow:0 -4px 0 #72b2ff}.pe-ex.pe-drop-after{box-shadow:0 4px 0 #72b2ff}
