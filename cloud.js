@@ -7,7 +7,7 @@ const cloudPendingKey='fitness_os_sync_pending';
 const cloudBaseKey=user=>'fitness_os_sync_base_'+user;
 const cloudCopy=value=>JSON.parse(JSON.stringify(value));
 const cloudEqual=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-const cloudHasRealData=value=>value&&Object.keys(value).some(k=>!cloudEqual(value[k],defaults[k])&&k!=='activeWorkout');
+const cloudHasRealData=value=>value&&Object.keys(value).some(k=>!cloudEqual(value[k],defaults[k]));
 // Conflict is deliberately non-destructive: never silently overwrite both writers' changes.
 function cloudMerge(base,local,remote,path='root'){
  if(cloudEqual(local,remote))return cloudCopy(local);
@@ -83,8 +83,8 @@ async function cloudSync(){
   const remote=data?.payload||cloudCopy(defaults),revision=data?.revision??0;
   const key=cloudBaseKey(cloudUser.id);
   let base;try{base=JSON.parse(localStorage.getItem(key)||'null')}catch{base=null}
-  const pending=cloudDirty||localStorage.getItem(cloudPendingKey)==='1';
   const current=cloudCopy(db);
+  const pending=cloudDirty||localStorage.getItem(cloudPendingKey)==='1'||(base&&!cloudEqual(current,base));
   if(!base){
    // Existing devices with data and an existing cloud record have no common
    // ancestor. Keep both unchanged rather than choosing a destructive overwrite.
@@ -109,7 +109,11 @@ async function cloudSync(){
    cloudStoreBase(snapshot,rev);
   }else cloudStoreBase(remote,revision);
   // A user action might have happened while the network request was pending.
-  const changedDuringSync=!cloudEqual(db,current);
+  let changedDuringSync=!cloudEqual(db,current);
+  if(changedDuringSync){
+   try{db=cloudMerge(current,db,next);changedDuringSync=!cloudEqual(db,next);localStorage.setItem('fitness_os_v1',JSON.stringify(db))}
+   catch{cloudToast('Änderungen während des Abgleichs gespeichert · erneuter Versuch')}
+  }
   if(!changedDuringSync){
    db=next;
    for(const k in defaults)if(!(k in db))db[k]=cloudCopy(defaults[k]);
@@ -153,7 +157,7 @@ function cloudConfigure(e){e.preventDefault();const f=new FormData(e.target),url
 async function cloudLogin(e){e.preventDefault();if(!cloud)return alert('Cloud zuerst konfigurieren.');const f=new FormData(e.target),email=String(f.get('email')),password=String(f.get('password'));const signup=f.get('mode')==='signup';try{const {data,error}=await (signup?cloud.auth.signUp({email,password}):cloud.auth.signInWithPassword({email,password}));if(error)throw error;if(!data.session){alert('Registriert. Bitte ggf. E-Mail bestätigen und danach anmelden.');return}cloudUser=data.user;cloudRevision=null;cloudToast('Angemeldet');await cloudSync()}catch(err){alert('Anmeldung fehlgeschlagen: '+err.message)}}
 async function cloudLogout(){if(!cloud)return;await cloud.auth.signOut();cloudUser=null;cloudRevision=null;cloudDirty=localStorage.getItem(cloudPendingKey)==='1';cloudToast('Abgemeldet');render()}
 async function cloudFirstUpload(){await cloudSync()}
-function cloudPanel(){const cfg=cloudConfig();return `<section class="card"><h2>☁ Cloud-Synchronisierung</h2><p class="small" id="cloudStatus">${esc(cloudStatus())}</p>${!cfg?`<p class="small">Supabase-Projekt erstellen, cloud.sql ausführen und hier die öffentlichen Zugangsdaten eintragen.</p><form class="stack" onsubmit="cloudImportConfig(event)"><label>Konfiguration aus Safari übernehmen<textarea name="config" rows="3" placeholder="Kopierten Konfigurationstext einfügen" required></textarea></label><button class="btn">Konfiguration übernehmen</button></form><p class="small">Einmalige Übertragung aus Safari → Home-Bildschirm-App. Danach wie gewohnt anmelden.</p><p class="small">Oder manuell konfigurieren:</p><form class="stack" onsubmit="cloudConfigure(event)"><label>Project URL<input name="url" placeholder="https://projekt.supabase.co" required></label><label>Publishable / anon Key<input name="key" required placeholder="sb_publishable_… oder eyJ…"></label><button class="btn">Cloud konfigurieren</button></form>`:cloudUser?`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><p class="small">Konto: ${esc(cloudUser.email)} · Cloud Revision: ${cloudRevision??'unbekannt'}</p><div class="stack"><button class="btn" onclick="cloudSync()">Jetzt abgleichen</button><button class="btn secondary" onclick="cloudSync()">Jetzt synchronisieren</button>${cloudRevision===0?'<button class="btn secondary" onclick="cloudFirstUpload()">Lokale Daten erstmalig hochladen</button>':''}<button class="btn secondary" onclick="cloudLogout()">Abmelden</button></div><p class="small">Offline wird zuerst lokal gespeichert und später automatisch abgeglichen. Konflikte werden nicht still überschrieben.</p>`:`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><form class="stack" onsubmit="cloudLogin(event)"><label>E-Mail<input type="email" name="email" autocomplete="email" required></label><label>Passwort<input type="password" name="password" minlength="8" autocomplete="current-password" required></label><label>Aktion<select name="mode"><option value="login">Anmelden</option><option value="signup">Konto erstellen</option></select></label><button class="btn">Weiter</button></form><p class="small">Mit demselben Konto auf iPhone und Mac anmelden. Projekt-URL und öffentlicher Schlüssel werden pro Browser eingerichtet.</p>`}</section>`}
+function cloudPanel(){const cfg=cloudConfig();return `<section class="card"><h2>☁ Cloud-Synchronisierung</h2><p class="small" id="cloudStatus">${esc(cloudStatus())}</p>${!cfg?`<p class="small">Supabase-Projekt erstellen, cloud.sql ausführen und hier die öffentlichen Zugangsdaten eintragen.</p><form class="stack" onsubmit="cloudImportConfig(event)"><label>Konfiguration aus Safari übernehmen<textarea name="config" rows="3" placeholder="Kopierten Konfigurationstext einfügen" required></textarea></label><button class="btn">Konfiguration übernehmen</button></form><p class="small">Einmalige Übertragung aus Safari → Home-Bildschirm-App. Danach wie gewohnt anmelden.</p><p class="small">Oder manuell konfigurieren:</p><form class="stack" onsubmit="cloudConfigure(event)"><label>Project URL<input name="url" placeholder="https://projekt.supabase.co" required></label><label>Publishable / anon Key<input name="key" required placeholder="sb_publishable_… oder eyJ…"></label><button class="btn">Cloud konfigurieren</button></form>`:cloudUser?`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><p class="small">Konto: ${esc(cloudUser.email)} · Cloud Revision: ${cloudRevision??'unbekannt'}</p><div class="stack"><button class="btn secondary" onclick="cloudSync()">Erneut synchronisieren</button><button class="btn secondary" onclick="cloudLogout()">Abmelden</button></div><p class="small">Offline wird zuerst lokal gespeichert und später automatisch abgeglichen. Konflikte werden nicht still überschrieben.</p>`:`<button class="btn secondary" onclick="cloudExportConfig()">Öffentliche Cloud-Konfiguration kopieren</button><form class="stack" onsubmit="cloudLogin(event)"><label>E-Mail<input type="email" name="email" autocomplete="email" required></label><label>Passwort<input type="password" name="password" minlength="8" autocomplete="current-password" required></label><label>Aktion<select name="mode"><option value="login">Anmelden</option><option value="signup">Konto erstellen</option></select></label><button class="btn">Weiter</button></form><p class="small">Mit demselben Konto auf iPhone und Mac anmelden. Projekt-URL und öffentlicher Schlüssel werden pro Browser eingerichtet.</p>`}</section>`}
 window.addEventListener('online',()=>cloudSchedule(100));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudSchedule(150)});
 window.addEventListener('focus',()=>cloudSchedule(150));
