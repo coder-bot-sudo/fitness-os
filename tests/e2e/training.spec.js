@@ -102,6 +102,7 @@ test('plan editor saves details and order across reload',async ({page})=>{
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('heading',{name:'Trainingsplan bearbeiten'})).toBeVisible();
  await page.getByRole('textbox',{name:'Trainingsname'}).fill('QA Oberkörper');
+ await page.locator('.pe-toggle').first().click();
  await page.getByRole('spinbutton',{name:'Sätze 1'}).fill('4');
  await page.getByRole('spinbutton',{name:'Sätze 1'}).blur();
  await page.getByRole('button',{name:/Fertig/}).click();
@@ -109,6 +110,7 @@ test('plan editor saves details and order across reload',async ({page})=>{
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('textbox',{name:'Trainingsname'})).toHaveValue('QA Oberkörper');
+ await page.locator('.pe-toggle').first().click();
  await expect(page.getByRole('spinbutton',{name:'Sätze 1'})).toHaveValue('4');
 });
 test('new plan uses full-page editor and adds exercise from catalog',async ({page})=>{
@@ -210,8 +212,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.3')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.3')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.06.4')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.4')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
@@ -335,4 +337,89 @@ test('different account cannot receive unsent local records',async ({page})=>{
  });
  expect(result.calls).toBe(0);
  expect(result.status).toContain('Anderes Konto');
+});
+
+test('plan editor starts collapsed and only one exercise can expand',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.locator('.pe-panel:visible')).toHaveCount(0);
+ await expect(page.locator('.pe-toggle').first()).toHaveAttribute('aria-expanded','false');
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex.push({name:'Rudern am Kabel',sets:4,reps:'10',rest:75});
+  persist();render();
+ });
+ await page.locator('.pe-toggle').first().click();
+ await expect(page.locator('.pe-panel:visible')).toHaveCount(1);
+ await expect(page.locator('.pe-toggle').first()).toHaveAttribute('aria-expanded','true');
+ await page.locator('.pe-toggle').nth(1).click();
+ await expect(page.locator('.pe-panel:visible')).toHaveCount(1);
+ await expect(page.locator('.pe-toggle').first()).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.pe-toggle').nth(1)).toHaveAttribute('aria-expanded','true');
+ await expect(page.getByRole('spinbutton',{name:'Sätze 2'})).toBeVisible();
+ await expect(page.getByRole('spinbutton',{name:'Sätze 1'})).toBeHidden();
+});
+test('plan editor uses header back and bottom finish without app nav overlay',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ const back=page.locator('.top').getByRole('button',{name:'Zurück'});
+ const finish=page.locator('.pe-footer').getByRole('button',{name:'Fertig'});
+ await expect(back).toBeVisible();
+ await expect(finish).toBeVisible();
+ await expect(page.locator('#bottomNav')).toBeHidden();
+ const snapshot=await page.evaluate(()=>({
+  overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
+  buttonHeight:document.querySelector('.pe-finish').getBoundingClientRect().height,
+  backHeight:document.querySelector('#pe-back').getBoundingClientRect().height
+ }));
+ expect(snapshot.overflow).toBeLessThanOrEqual(2);
+ expect(snapshot.buttonHeight).toBeGreaterThanOrEqual(44);
+ expect(snapshot.backHeight).toBeGreaterThanOrEqual(44);
+ await back.click();
+ await expect(page.getByRole('button',{name:/Plan bearbeiten/})).toBeVisible();
+ await expect(page.locator('#bottomNav')).not.toHaveClass(/live-bottom/);
+});
+test('keyboard handle reorders plan and preserves selection after reload',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex.push({name:'Rudern am Kabel',sets:3,reps:'12',rest:80});
+  persist();render();
+ });
+ await page.locator('.pe-toggle').first().click();
+ const handle=page.locator('.pe-handle').first();
+ await handle.focus();
+ await handle.press('ArrowDown');
+ await expect(page.locator('.pe-ex-title b').first()).toHaveText('Rudern am Kabel');
+ await expect(page.locator('.pe-ex-title b').nth(1)).toHaveText('Bankdrücken');
+ await expect(page.locator('.pe-toggle').nth(1)).toHaveAttribute('aria-expanded','true');
+ await page.reload();
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.locator('.pe-ex-title b').first()).toHaveText('Rudern am Kabel');
+});
+test('press and hold drag handle reorders exercises and persists after reload',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex.push({name:'Rudern am Kabel',sets:3,reps:'10',rest:90});
+  persist();render();
+ });
+ const handle=page.locator('.pe-handle').first();
+ const second=page.locator('.pe-ex').nth(1);
+ const a=await handle.boundingBox(),b=await second.boundingBox();
+ if(!a||!b)throw Error('Drag targets missing');
+ await page.mouse.move(a.x+a.width/2,a.y+a.height/2);
+ await page.mouse.down();
+ await page.waitForTimeout(390);
+ await page.mouse.move(b.x+b.width/2,b.y+b.height*0.75,{steps:6});
+ await page.mouse.up();
+ await expect(page.locator('.pe-ex-title b').first()).toHaveText('Rudern am Kabel');
+ await page.reload();
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.locator('.pe-ex-title b').first()).toHaveText('Rudern am Kabel');
 });
