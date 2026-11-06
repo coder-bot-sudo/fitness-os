@@ -210,9 +210,66 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.2')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.2')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.06.3')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.3')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
+});
+
+test('per repetition weight changes, undo, correction, reload and volume',async ({page})=>{
+ await page.addInitScript(({running})=>localStorage.setItem('fitness_os_active_v3',JSON.stringify(running)),{running});
+ await page.goto('/');
+ await expect(page.getByRole('button',{name:/Wiederholung bestätigen/})).toBeVisible();
+ await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
+ await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
+ await page.locator('#v3-kg').fill('50');
+ await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([65,65,50]);
+ await page.getByRole('button',{name:/Letzte Wiederholung zurücknehmen/}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([65,65]);
+ page.once('dialog',d=>d.accept('55'));
+ await page.getByRole('button',{name:/Wiederholung 1 korrigieren/}).click();
+ await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([55,65,50]);
+ await page.reload();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([55,65,50]);
+ await page.getByRole('button',{name:/Satz abschließen/}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].done)).toBe(true);
+ await page.evaluate(()=>endWorkout());
+ const sets=await page.evaluate(()=>analyticsAllSets().filter(r=>r.name==='Bankdrücken'));
+ expect(sets.some(r=>r.reps===3&&r.volume===170&&r.kg===65&&r.e1rm===null)).toBe(true);
+ expect(sets.some(r=>r.reps===8&&r.volume===480&&r.kg===60)).toBe(true);
+});
+test('offline changes persist and safe cloud merge combines independent completed workouts',async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(async()=>{
+  const one={id:'local-1',date:'2026-11-06',name:'iPhone',ex:[]};
+  const two={id:'remote-1',date:'2026-11-06',name:'Mac',ex:[]};
+  const base=structuredClone(defaults);
+  db=structuredClone(base);db.sessions.push(one);persist();
+  const remote=structuredClone(base);remote.sessions.push(two);
+  localStorage.setItem(cloudBaseKey('qa-user'),JSON.stringify(base));
+  cloudUser={id:'qa-user',email:'qa@example.invalid'};
+  let saved=null;cloud={
+    from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{payload:remote,revision:4},error:null})})})}),
+    rpc:async(_,args)=>{saved=args.new_payload;return {data:5,error:null}}
+  };
+  await cloudSync();
+  return {sessions:db.sessions.map(x=>x.id),pushed:saved?.sessions.map(x=>x.id),pending:localStorage.getItem(cloudPendingKey),revision:cloudRevision};
+ });
+ expect(result.sessions).toEqual(expect.arrayContaining(['local-1','remote-1']));
+ expect(result.pushed).toEqual(expect.arrayContaining(['local-1','remote-1']));
+ expect(result.pending).toBeNull();
+ expect(result.revision).toBe(5);
+});
+test('simultaneous edits to the same record are not silently overwritten',async ({page})=>{
+ await page.goto('/');
+ const result=await page.evaluate(()=>{
+  const base={templates:[{id:1,name:'Original',ex:[]}]};
+  const local={templates:[{id:1,name:'iPhone edit',ex:[]}]};
+  const remote={templates:[{id:1,name:'Mac edit',ex:[]}]};
+  try{cloudMerge(base,local,remote);return 'overwritten'}catch(e){return e.message}
+ });
+ expect(result).toContain('SYNC_MERGE_CONFLICT');
 });
