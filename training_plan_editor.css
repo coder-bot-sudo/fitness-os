@@ -45,7 +45,7 @@
 .pe-empty{text-align:center;padding:24px}
 .pe-empty h3{margin:0 0 8px}
 .pe-empty p{color:#afc4db;margin:0}
-.pe-footer{position:sticky;bottom:max(0px,env(safe-area-inset-bottom));z-index:6;margin:24px -8px 0;padding:12px 8px max(12px,env(safe-area-inset-bottom));background:linear-gradient(0deg,#0b1220 80%,#0b122000);border-radius:14px}
+.pe-footer{position:sticky;bottom:0;z-index:6;margin:24px -8px 0;padding:12px 8px calc(12px + env(safe-area-inset-bottom,0px));background:#0b1220;border-top:1px solid #263b58;box-shadow:0 -10px 24px rgba(11,18,32,.28);border-radius:0}
 .pe-finish{display:block;width:100%;min-height:52px;font-size:16px}
 @media(max-width:650px){.pe-editing .main{padding:17px 13px 16px}.pe-editing .top{margin-bottom:17px}.pe-editing .top h1{font-size:19px}.pe-intro h2{font-size:19px}.pe-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.pe-fields label:last-child{grid-column:1/-1}.pe-panel{padding:4px 12px 14px}.pe-toggle{padding-left:10px;gap:9px}.pe-handle{width:48px;min-width:48px}.pe-footer{margin-left:-4px;margin-right:-4px}}
 @media(prefers-reduced-motion:reduce){.pe-ex{transition:none}}
