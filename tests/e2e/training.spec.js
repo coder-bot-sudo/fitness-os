@@ -463,7 +463,7 @@ test('delete plan preserves workout history and allows recovery from empty templ
  const oldHistory=await page.evaluate(()=>JSON.stringify(db.sessions));
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  page.once('dialog',async d=>{
-  expect(d.message()).toContain('Oberkörper');
+  expect(d.message()).toContain('QA Plan');
   expect(d.message()).toContain('Bereits abgeschlossene Trainings');
   await d.accept();
  });
