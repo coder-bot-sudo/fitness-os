@@ -8,7 +8,18 @@ const cloudOwnerKey='fitness_os_cloud_owner';
 let cloudInitBusy=false,cloudAuthSubscribed=false;
 const cloudBaseKey=user=>'fitness_os_sync_base_'+user;
 const cloudCopy=value=>JSON.parse(JSON.stringify(value));
-const cloudEqual=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function cloudEqual(a,b){
+ if(a===b)return true;
+ if(a===null||b===null||typeof a!=='object'||typeof b!=='object')return false;
+ if(Array.isArray(a)||Array.isArray(b))return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,i)=>cloudEqual(v,b[i]));
+ const ak=Object.keys(a).sort(),bk=Object.keys(b).sort();
+ return ak.length===bk.length&&ak.every((k,i)=>k===bk[i]&&cloudEqual(a[k],b[k]));
+}
+function cloudCanonical(value){
+ if(Array.isArray(value))return '['+value.map(cloudCanonical).join(',')+']';
+ if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+cloudCanonical(value[k])).join(',')+'}';
+ return JSON.stringify(value);
+}
 const cloudHasRealData=value=>value&&Object.keys(value).some(k=>!cloudEqual(value[k],defaults[k]));
 // Conflict is deliberately non-destructive: never silently overwrite both writers' changes.
 function cloudMerge(base,local,remote,path='root'){
@@ -34,7 +45,7 @@ function cloudMerge(base,local,remote,path='root'){
    }
    return out;
   }
-  const encode=x=>JSON.stringify(x),bk=new Set(b.map(encode));
+  const encode=cloudCanonical,bk=new Set(b.map(encode));
   if(b.some(x=>!local.some(y=>cloudEqual(x,y))||!remote.some(y=>cloudEqual(x,y))))throw Error('SYNC_MERGE_CONFLICT '+path);
   const out=cloudCopy(remote),present=new Set(remote.map(encode));
   for(const x of local){const k=encode(x);if(!present.has(k)&&!bk.has(k)){out.push(cloudCopy(x));present.add(k)}}
@@ -146,6 +157,7 @@ async function cloudSync(){
    catch{cloudToast('Änderungen während des Abgleichs gespeichert · erneuter Versuch')}
   }
   if(!changedDuringSync){
+   const shouldRender=!cloudEqual(db,next);
    db=next;
    for(const k in defaults)if(!(k in db))db[k]=cloudCopy(defaults[k]);
    localStorage.setItem('fitness_os_v1',JSON.stringify(db));
@@ -158,7 +170,7 @@ async function cloudSync(){
     active=null;
     localStorage.removeItem('fitness_os_active_v3');
    }
-   render();
+   if(shouldRender)render();
   }
   cloudDirty=changedDuringSync;
   if(cloudDirty){localStorage.setItem(cloudPendingKey,'1');cloudSchedule(1000)}
