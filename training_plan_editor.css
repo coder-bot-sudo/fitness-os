@@ -51,3 +51,12 @@
 @media(prefers-reduced-motion:reduce){.pe-ex{transition:none}}
 
 .pe-ex.pe-drop-before{box-shadow:0 -4px 0 #72b2ff}.pe-ex.pe-drop-after{box-shadow:0 4px 0 #72b2ff}
+
+/* Destructive plan-level action stays separated from everyday editing. */
+.pe-danger-zone{margin:24px 0 8px;padding:20px 0 0;border-top:1px solid #34455e}
+.pe-delete-plan{display:block;min-height:48px;width:100%;background:transparent;border:1px solid #9b5060;color:#f5aeb6;border-radius:12px;font:inherit;font-weight:650;touch-action:manipulation}
+.pe-delete-plan:focus-visible{outline:3px solid #9ac9ff;outline-offset:3px}
+.pe-delete-plan:hover{background:#54283b}
+.pe-no-plans{display:grid;gap:12px;max-width:640px;margin:16px auto}
+.pe-no-plans h2,.pe-no-plans p{margin:0}
+.pe-no-plans button{min-height:48px}
