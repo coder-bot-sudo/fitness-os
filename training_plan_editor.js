@@ -125,7 +125,7 @@ function planEditorDragStart(event,i){
  if(event.button!==0||planEditorDrag)return;
  const handle=event.currentTarget,row=handle.closest('.pe-ex');
  if(!row)return;
- const drag={pointerId:event.pointerId,handle,row,index:i,startingX:event.clientX,startingY:event.clientY,ready:false,cancelled:false};
+ const drag={pointerId:event.pointerId,handle,row,index:i,startingX:event.clientX,startingY:event.clientY,centers:[...document.querySelectorAll('#pe-list>.pe-ex')].map(e=>{const r=e.getBoundingClientRect();return r.top+r.height/2}),ready:false,cancelled:false};
  planEditorDrag=drag;
  handle.setPointerCapture?.(event.pointerId);
  drag.timer=setTimeout(()=>{
@@ -161,12 +161,16 @@ function planEditorDragEnd(event){
  planEditorDrag=null;
  if(!drag.ready)return;
  planEditorSuppressClick=true;setTimeout(()=>{planEditorSuppressClick=false},120);
- const indices=[...document.querySelectorAll('#pe-list>.pe-ex')].map(node=>Number(node.dataset.peIndex));
  const arr=db.templates[selectedTemplate]?.ex;
- if(!arr||indices.length!==arr.length)return;
- const before=[...arr];
- const selected=planEditorExpanded===null?null:before[planEditorExpanded];
- arr.splice(0,arr.length,...indices.map(i=>before[i]));
+ if(!arr||drag.centers.length!==arr.length)return;
+ const original=drag.index;
+ const passed=drag.centers.filter(y=>event.clientY>y).length;
+ const destination=Math.max(0,Math.min(arr.length-1,passed-(passed>original?1:0)));
+ const selected=planEditorExpanded===null?null:arr[planEditorExpanded];
+ if(original!==destination){
+  const moved=arr.splice(original,1)[0];
+  arr.splice(destination,0,moved);
+ }
  planEditorExpanded=selected?arr.indexOf(selected):null;
  persist();render();
 }
