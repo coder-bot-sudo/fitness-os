@@ -218,8 +218,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.8')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.8')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.06.9')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.9')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -472,12 +472,12 @@ test('delete plan preserves workout history and allows recovery from empty templ
   await d.accept();
  });
  await page.getByRole('button',{name:'Trainingsplan löschen'}).click();
- await expect(page.getByRole('heading',{name:'Keine Trainingspläne vorhanden'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Keine Trainingspläne'})).toBeVisible();
  expect(await page.evaluate(()=>db.templates.length)).toBe(0);
  expect(await page.evaluate(()=>JSON.stringify(db.sessions))).toBe(oldHistory);
  await page.reload();
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
- await expect(page.getByRole('heading',{name:'Keine Trainingspläne vorhanden'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Keine Trainingspläne'})).toBeVisible();
  await page.getByRole('button',{name:/Trainingsplan erstellen/}).click();
  await expect(page.getByRole('heading',{name:'Trainingsplan bearbeiten'})).toBeVisible();
  expect(await page.evaluate(()=>db.templates.length)).toBe(1);
@@ -549,5 +549,20 @@ test('editor has one filled primary action and outlined add exercise button',asy
  expect(state.finishBg).not.toBe(state.addBg);
  expect(state.primaryCount).toBe(1);
  await add.click();
+ await expect(page.getByRole('heading',{name:'Übung auswählen'})).toBeVisible();
+});
+
+test('clean editor hides redundant hints while retaining useful exercise summaries',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.locator('#pe-plan-name')).toBeVisible();
+ await expect(page.getByText('Änderungen werden automatisch gespeichert.')).toHaveCount(0);
+ await expect(page.getByText('Zum Bearbeiten antippen.')).toHaveCount(0);
+ await expect(page.getByText(/insgesamt/)).toHaveCount(0);
+ await expect(page.locator('.pe-summary').first()).toContainText('Sätze');
+ await expect(page.getByRole('button',{name:'Trainingsname bearbeiten'})).toBeVisible();
+ await expect(page.locator('.pe-handle').first()).toBeVisible();
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
  await expect(page.getByRole('heading',{name:'Übung auswählen'})).toBeVisible();
 });

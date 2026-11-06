@@ -8,13 +8,8 @@
 .pe-page{max-width:780px;margin:0 auto;position:relative;padding-bottom:16px}
 .pe-intro{margin:2px 0 20px}
 .pe-intro h2{font-size:21px;margin:0 0 5px}
-.pe-intro p{margin:0;color:#aabed8}
-.pe-details{margin-bottom:24px}
-.pe-details input{margin-top:7px}
-.pe-details .small{margin-top:11px}
 .pe-section{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 8px}
 .pe-section h3{margin:0}
-.pe-help{margin:0 0 15px;color:#96abc5}
 .pe-list{display:grid;gap:10px;position:relative}
 .pe-ex{background:#17243a;border:1px solid #2c425f;border-radius:15px;overflow:visible;transition:border-color .15s ease,background .15s ease}
 .pe-ex.pe-open{border-color:#5689ca;background:#1a2b45}

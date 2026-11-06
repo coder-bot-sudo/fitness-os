@@ -135,7 +135,7 @@ function planEditorCard(e,i,total){
  '<button type="button" id="pe-toggle-'+i+'" class="pe-toggle" aria-expanded="'+open+'" aria-controls="pe-panel-'+i+'" onclick="planEditorToggle('+i+')">'+
  '<span class="pe-number">'+(i+1)+'</span><span class="pe-ex-title"><b>'+v3Clean(e.name)+'</b><span class="pe-summary">'+v3Clean(planEditorSummary(e))+'</span></span>'+
  '<span class="pe-chevron" aria-hidden="true">'+(open?'⌃':'⌄')+'</span></button>'+
- '<button type="button" class="pe-handle" aria-label="'+v3Clean(e.name)+': Reihenfolge ändern" title="Lange drücken und ziehen; Pfeiltasten zum Sortieren" aria-describedby="pe-drag-help" onpointerdown="planEditorDragStart(event,'+i+')" onpointermove="planEditorDragMove(event)" onpointerup="planEditorDragEnd(event)" onpointercancel="planEditorDragCancel()" onkeydown="planEditorHandleKey(event,'+i+')">⠿</button>'+
+ '<button type="button" class="pe-handle" aria-label="'+v3Clean(e.name)+': Reihenfolge ändern" title="Reihenfolge ändern" onpointerdown="planEditorDragStart(event,'+i+')" onpointermove="planEditorDragMove(event)" onpointerup="planEditorDragEnd(event)" onpointercancel="planEditorDragCancel()" onkeydown="planEditorHandleKey(event,'+i+')">⠿</button>'+
  '</div>'+
  '<div class="pe-panel" id="pe-panel-'+i+'" role="region" aria-label="'+v3Clean(e.name)+' Einstellungen" '+(open?'':'hidden')+'>'+
  '<div class="pe-fields"><label>Sätze<input aria-label="Sätze '+(i+1)+'" type="number" min="1" max="20" value="'+Number(e.sets||3)+'" onchange="planEditorNumber('+i+',\'sets\',this.value)"></label>'+
@@ -147,13 +147,13 @@ function planEditorCard(e,i,total){
 }
 function planEditorPageHtml(){
  const t=db.templates[selectedTemplate];if(!t)return '<section class="card">Kein Plan ausgewählt.</section>';
- const list=t.ex.length?t.ex.map((e,i)=>planEditorCard(e,i,t.ex.length)).join(''):'<div class="card pe-empty"><h3>Dein Plan ist noch leer</h3><p>Füge deine erste Übung hinzu oder erstelle eine eigene.</p></div>';
+ const list=t.ex.length?t.ex.map((e,i)=>planEditorCard(e,i,t.ex.length)).join(''):'<div class="card pe-empty"><h3>Noch keine Übungen</h3></div>';
  return '<section class="pe-page"><div class="pe-intro">'+
  '<div class="pe-title-row"><h2 id="pe-plan-name">'+v3Clean(t.name)+'</h2><button type="button" class="pe-rename-button" id="pe-rename-button" aria-label="Trainingsname bearbeiten" title="Trainingsname bearbeiten" onclick="planEditorStartRename()"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg></button>'+
  '<input id="pe-plan-name-input" class="pe-name-input" type="text" maxlength="80" aria-label="Trainingsname" value="'+v3Clean(t.name).replace(/"/g,'&quot;')+'" onkeydown="planEditorRenameKey(event)" onblur="planEditorFinishRename(true)" hidden></div>'+
- '<p class="small">Änderungen werden automatisch gespeichert.</p></div>'+
- '<div class="pe-section"><h3>Übungen</h3><span class="small">'+t.ex.length+' insgesamt</span></div>'+
- '<p id="pe-drag-help" class="pe-help small">Zum Bearbeiten antippen. Für die Reihenfolge den Griff rechts gedrückt halten und ziehen.</p>'+
+ '</div>'+
+ '<div class="pe-section"><h3>Übungen</h3></div>'+
+
  '<div class="pe-list" id="pe-list">'+list+'</div>'+
  '<div class="pe-add-actions"><button class="pe-add pe-add-outline" type="button" onclick="planEditorAdd()">＋ Übung hinzufügen</button></div>'+
  '<section class="pe-danger-zone"><button type="button" class="pe-delete-plan" onclick="planEditorDelete()">Trainingsplan löschen</button></section>'+
@@ -235,7 +235,7 @@ showTraining=function(){
  if(!active&&v3Catalog)return v3CatalogUI();
  if(!active&&planEditorPage)return planEditorPageHtml();
  if(!active&&!db.templates?.length&&analyticsMode==='training'){
-  return '<section class="card pe-no-plans"><h2>Keine Trainingspläne vorhanden</h2><p class="small">Erstelle einen neuen Trainingsplan, um dein nächstes Training zu beginnen.</p><button type="button" class="btn" onclick="createTemplate()">＋ Trainingsplan erstellen</button></section>';
+  return '<section class="card pe-no-plans"><h2>Keine Trainingspläne</h2><button type="button" class="btn" onclick="createTemplate()">＋ Trainingsplan erstellen</button></section>';
  }
  return planEditorPreviousShow();
 };
