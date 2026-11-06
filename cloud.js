@@ -89,12 +89,17 @@ async function cloudSync(){
    // Existing devices with data and an existing cloud record have no common
    // ancestor. Keep both unchanged rather than choosing a destructive overwrite.
    if(data&&cloudHasRealData(current)&&!cloudEqual(current,remote)){
-    cloudToast('Abgleich erforderlich: beide Datenstände gesichert · kein Überschreiben');
-    return;
+    // Attempt a conservative merge for data created before this sync engine.
+    // If concurrent edits to one field cannot be reconciled, keep the local copy.
+    try{cloudMerge(defaults,current,remote)}catch{
+     cloudToast('Abgleich erforderlich: lokale und Cloud-Änderungen geschützt');
+     return;
+    }
+    cloudDirty=true;
    }
    base=cloudCopy(defaults);
   }
-  const next=pending?cloudMerge(base,current,remote):cloudCopy(remote);
+  const next=(pending||cloudDirty)?cloudMerge(base,current,remote):cloudCopy(remote);
   // If local data has no base but cloud is empty, upload the local data.
   if(!data&&cloudHasRealData(current))Object.assign(next,cloudMerge(base,current,remote));
   if(!cloudEqual(next,remote)){
