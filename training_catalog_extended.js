@@ -37,7 +37,7 @@ function catalogCreateForm(){
 }
 function catalogCreateSubmit(event){
  event.preventDefault();
- const data=new FormData(event.target),name=String(data.get('name')||'').trim().replace(/\\s+/g,' ').slice(0,80);
+ const data=new FormData(event.target),name=String(data.get('name')||'').trim().replace(/\s+/g,' ').slice(0,80);
  const error=document.getElementById('cat-create-error');
  const fail=message=>{if(error){error.hidden=false;error.textContent=message}};
  if(!name)return fail('Bitte einen Übungsnamen eingeben.');
