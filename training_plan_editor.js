@@ -113,7 +113,7 @@ function planEditorPageHtml(){
  '<div class="pe-section"><h3>Übungen</h3><span class="small">'+t.ex.length+' insgesamt</span></div>'+
  '<p id="pe-drag-help" class="pe-help small">Zum Bearbeiten antippen. Für die Reihenfolge den Griff rechts gedrückt halten und ziehen.</p>'+
  '<div class="pe-list" id="pe-list">'+list+'</div>'+
- '<div class="pe-add-actions"><button class="btn pe-add" onclick="planEditorAdd()">＋ Übung hinzufügen</button><button class="btn secondary pe-add" onclick="planEditorCreateExercise()">＋ Eigene Übung erstellen</button></div>'+
+ '<div class="pe-add-actions"><button class="btn pe-add" onclick="planEditorAdd()">＋ Übung hinzufügen</button></div>'+
  '<footer class="pe-footer"><button type="button" class="btn pe-finish" onclick="planEditorClose()">Fertig</button></footer></section>';
 }
 function planEditorHandleKey(event,i){

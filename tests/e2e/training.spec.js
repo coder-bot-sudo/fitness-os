@@ -187,10 +187,12 @@ test('custom exercise can be added during an active workout', async ({page}) => 
  expect(await page.evaluate(()=>db.exercises.some(e=>e.name==='Mein Zug im Training'))).toBe(true);
 });
 
-test('custom exercise creation is directly available while editing a plan',async ({page})=>{
+test('custom exercise creation is available only in plan editor catalog',async ({page})=>{
  await page.goto('/');
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
  await page.getByRole('button',{name:/Eigene Übung erstellen/}).click();
  await expect(page.getByRole('heading',{name:'Eigene Übung erstellen'})).toBeVisible();
@@ -212,10 +214,12 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.4')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.4')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.06.5')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.5')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
 });
 
@@ -422,4 +426,21 @@ test('press and hold drag handle reorders exercises and persists after reload',a
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.locator('.pe-ex-title b').first()).toHaveText('Rudern am Kabel');
+});
+
+test('sticky finish footer has no safe-area gap or gradient',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:/Plan bearbeiten/}).click();
+ const style=await page.locator('.pe-footer').evaluate(el=>{
+  const c=getComputedStyle(el);
+  return {bottom:c.bottom,bg:c.backgroundColor,image:c.backgroundImage,radius:c.borderRadius,height:el.getBoundingClientRect().height};
+ });
+ expect(style.bottom).toBe('0px');
+ expect(style.bg).toBe('rgb(11, 18, 32)');
+ expect(style.image).toBe('none');
+ expect(style.radius).toBe('0px');
+ expect(style.height).toBeGreaterThanOrEqual(64);
+ await expect(page.locator('.pe-add-actions').getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
+ await expect(page.locator('.pe-footer').getByRole('button',{name:'Fertig'})).toBeVisible();
 });
