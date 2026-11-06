@@ -1,1 +1,3 @@
 .cat-picture{display:flex;align-items:center;text-align:left;min-height:62px;width:100%;touch-action:manipulation}.cat-text{flex:1;min-width:0}.cat-text b,.cat-text small{display:block}.cat-text small{margin-top:5px}.cat-detail{max-width:620px;margin:0 auto}.cat-select{width:100%;min-height:52px;margin-top:18px}
+
+.cat-create{display:grid;gap:16px;margin-top:20px}.cat-create label{display:flex;flex-direction:column;gap:7px}.cat-create-open{width:100%;margin:12px 0 14px;min-height:48px}.cat-create-error{color:#ff9aa5;font-size:13px;margin:0}
