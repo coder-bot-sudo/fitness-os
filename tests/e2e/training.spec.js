@@ -183,7 +183,8 @@ test('custom exercise can be added during an active workout', async ({page}) => 
    localStorage.setItem('fitness_os_active_v3',JSON.stringify(running));
  },{running});
  await page.goto('/');
- await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Übungen'}).first().click();
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ await page.getByRole('button',{name:/Übung hinzufügen/}).click();
  await page.getByRole('button',{name:/Eigene Übung erstellen/}).click();
  await page.getByRole('textbox',{name:'Name der eigenen Übung'}).fill('Mein Zug im Training');
  await page.getByRole('button',{name:'Übung speichern und auswählen'}).click();
@@ -639,7 +640,7 @@ test('lean screen is accessible on simulated iPhone and overview remains reachab
  expect(metrics.overflow).toBeLessThanOrEqual(2);
  expect(metrics.controls.every(x=>x.w>=39&&x.h>=44)).toBe(true);
  await page.getByRole('button',{name:'Trainingsübersicht'}).click();
- await expect(page.getByText('TRAININGSÜBERSICHT')).toBeVisible();
+ await expect(page.locator('.v4-eyebrow').getByText('TRAININGSÜBERSICHT',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:/Zurück zum aktuellen Satz/}).click();
  await expect(page.locator('.lean-live')).toBeVisible();
 });
