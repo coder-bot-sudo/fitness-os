@@ -36,14 +36,14 @@ test('live navigation, discard cancellation and confirmed discard preserve histo
   await page.addInitScript(({running}) => localStorage.setItem('fitness_os_active_v3',JSON.stringify(running)), {running});
   await page.goto('/');
   test.skip(!(await page.evaluate(() => typeof liveDiscard === 'function')), 'Live navigation is not yet merged into main');
-  await expect(page.locator('#bottomNav')).toHaveClass(/live-bottom/);
-  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Übersicht'}).first().click();
+  await expect(page.locator('#bottomNav')).toBeHidden();
+  await page.getByRole('button',{name:'Trainingsübersicht'}).click();
   await expect(page.locator('#view')).toContainText('Training');
-  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Mehr'}).first().click();
+  await page.evaluate(()=>liveGo('more'));
   await expect(page.getByRole('button',{name:'Training verwerfen'})).toBeVisible();
   page.once('dialog',d=>d.dismiss());
   await page.getByRole('button',{name:'Training verwerfen'}).click();
-  await expect(page.locator('#bottomNav')).toHaveClass(/live-bottom/);
+  expect(await page.evaluate(()=>Boolean(active))).toBe(true);
   page.once('dialog',d=>d.accept());
   await page.getByRole('button',{name:'Training verwerfen'}).click();
   await expect(page.locator('#bottomNav')).not.toHaveClass(/live-bottom/);
@@ -218,8 +218,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.06.9')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.06.9')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.07.1')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.07.1')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -227,28 +227,19 @@ test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toBeVisible();
 });
 
-test('per repetition weight changes, undo, correction, reload and volume',async ({page})=>{
+test('new live training stores reps and weight per set while retaining historical sets',async ({page})=>{
  await page.addInitScript(({running})=>{if(sessionStorage.getItem('qa-running-set'))return;sessionStorage.setItem('qa-running-set','1');localStorage.setItem('fitness_os_active_v3',JSON.stringify(running))},{running});
  await page.goto('/');
- await expect(page.getByRole('button',{name:/Wiederholung bestätigen/})).toBeVisible();
- await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
- await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
- await page.locator('#v3-kg').fill('50');
- await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
- expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([65,65,50]);
- await page.getByRole('button',{name:/Letzte Wiederholung zurücknehmen/}).click();
- expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([65,65]);
- page.once('dialog',d=>d.accept('55'));
- await page.getByRole('button',{name:/Wiederholung 1 korrigieren/}).click();
- await page.getByRole('button',{name:/Wiederholung bestätigen/}).click();
- expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([55,65,50]);
- await page.reload();
- expect(await page.evaluate(()=>active.ex[0].rows[0].repetitionLog.map(r=>r.weightKg))).toEqual([55,65,50]);
- await page.getByRole('button',{name:/Satz abschließen/}).click();
- expect(await page.evaluate(()=>active.ex[0].rows[0].done)).toBe(true);
- await page.evaluate(()=>endWorkout());
+ await expect(page.getByRole('heading',{name:'Bankdrücken'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Wiederholung bestätigen'})).toHaveCount(0);
+ await page.getByRole('spinbutton',{name:'Wdh.'}).fill('7');
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('52.5');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0])).toMatchObject({done:true,reps:7,kg:52.5});
+ await expect(page.getByRole('heading',{name:'Training abgeschlossen'})).toBeVisible();
+ await page.getByRole('button',{name:'Training beenden'}).click();
  const sets=await page.evaluate(()=>analyticsAllSets().filter(r=>r.name==='Bankdrücken'));
- expect(sets.some(r=>r.reps===3&&r.volume===170&&r.kg===65&&r.e1rm===null)).toBe(true);
+ expect(sets.some(r=>r.reps===7&&r.volume===367.5&&r.kg===52.5)).toBe(true);
  expect(sets.some(r=>r.reps===8&&r.volume===480&&r.kg===60)).toBe(true);
 });
 test('offline changes persist and safe cloud merge combines independent completed workouts',async ({page})=>{
@@ -565,4 +556,90 @@ test('clean editor hides redundant hints while retaining useful exercise summari
  await expect(page.locator('.pe-handle').first()).toBeVisible();
  await page.getByRole('button',{name:/Übung hinzufügen/}).click();
  await expect(page.getByRole('heading',{name:'Übung auswählen'})).toBeVisible();
+});
+
+test('lean mockup two-screen flow, timer, next exercise and reload persistence',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].name='Oberkörper A';
+  db.templates[selectedTemplate].ex=[
+   {name:'Bankdrücken',sets:2,reps:'8–10',rest:90},
+   {name:'Rudern am Kabel',sets:1,reps:'10',rest:60}
+  ];
+  persist();newSession();
+ });
+ await expect(page.locator('.lean-live')).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Bankdrücken'})).toBeVisible();
+ await expect(page.getByText('Satz 1 von 2')).toBeVisible();
+ await expect(page.locator('#bottomNav')).toBeHidden();
+ await expect(page.getByText('Zum Bearbeiten antippen.')).toHaveCount(0);
+ await page.getByRole('spinbutton',{name:'Wdh.'}).fill('10');
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('60');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ await expect(page.locator('#lean-countdown')).toContainText('01:');
+ await expect(page.getByText('Satz 2 von 2')).toBeVisible();
+ const saved=await page.evaluate(()=>({
+  set:active.ex[0].rows[0],restUntil:active.leanRestUntil,
+  cloudSnapshot:JSON.parse(localStorage.getItem('fitness_os_v1')).activeWorkout
+ }));
+ expect(saved.set).toMatchObject({kg:60,reps:10,done:true});
+ expect(saved.restUntil).toBeGreaterThan(Date.now());
+ expect(saved.cloudSnapshot.ex[0].rows[0].done).toBe(true);
+ await page.reload();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ await page.getByRole('button',{name:'Pause überspringen'}).click();
+ await expect(page.getByText('Satz 2 von 2')).toBeVisible();
+ await page.getByRole('spinbutton',{name:'Wdh.'}).fill('8');
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('62.5');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Rudern am Kabel'})).toBeVisible();
+ await expect(page.getByText('Satz 1 von 1')).toBeVisible();
+ await page.getByRole('button',{name:'Weiter'}).click();
+ await expect(page.getByRole('heading',{name:'Rudern am Kabel'})).toBeVisible();
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Training abgeschlossen'})).toBeVisible();
+ await page.getByRole('button',{name:'Training beenden'}).click();
+ await expect(page.locator('.lean-live')).toHaveCount(0);
+ const summary=await page.evaluate(()=>db.sessions.at(-1).ex.map(e=>e.rows.map(r=>r.done)));
+ expect(summary).toEqual([[true,true],[true]]);
+});
+test('rest timer expiry automatically shows next set and rejects invalid inputs',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex=[{name:'Bankdrücken',sets:2,reps:'10',rest:90}];
+  newSession();
+ });
+ const repetitions=page.getByRole('spinbutton',{name:'Wdh.'});
+ await repetitions.fill('0');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ expect(await page.evaluate(()=>active.ex[0].rows[0].done)).toBe(false);
+ await expect(repetitions).toHaveAttribute('aria-invalid','true');
+ await repetitions.fill('10');
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('40');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ await page.evaluate(()=>{active.leanRestUntil=Date.now()-100;leanTick()});
+ await expect(page.getByText('Satz 2 von 2')).toBeVisible();
+ await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toBeVisible();
+ expect(await page.evaluate(()=>active.leanRestUntil)).toBeNull();
+});
+test('lean screen is accessible on simulated iPhone and overview remains reachable',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:'Training starten'}).click();
+ await expect(page.locator('.lean-live')).toBeVisible();
+ const metrics=await page.evaluate(()=>({
+  overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
+  controls:[...document.querySelectorAll('.lean-live button')].map(el=>({w:el.getBoundingClientRect().width,h:el.getBoundingClientRect().height}))
+ }));
+ expect(metrics.overflow).toBeLessThanOrEqual(2);
+ expect(metrics.controls.every(x=>x.w>=39&&x.h>=44)).toBe(true);
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ await expect(page.getByText('TRAININGSÜBERSICHT')).toBeVisible();
+ await page.getByRole('button',{name:/Zurück zum aktuellen Satz/}).click();
+ await expect(page.locator('.lean-live')).toBeVisible();
 });
