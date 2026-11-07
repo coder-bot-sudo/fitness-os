@@ -70,6 +70,23 @@ function leanResume(){
  if(!active)return;
  leanClearRest();
 }
+/* A skipped exercise is never counted as completed. */
+function leanSkipExercise(){
+ if(!active)return;
+ const currentIndex=active.focus,exercise=active.ex[currentIndex];
+ if(!exercise)return;
+ const pending=exercise.rows.filter(row=>!row.done&&!row.skipped);
+ if(!pending.length)return;
+ pending.forEach(row=>{row.skipped=true});
+ active.v4LastSkipped=currentIndex;
+ const next=active.ex.findIndex((candidate,index)=>index>currentIndex&&candidate.rows.some(row=>!row.done&&!row.skipped));
+ if(next>=0)active.focus=next;
+ active.leanRestUntil=null;
+ active.leanRestDuration=null;
+ stopRest();
+ v3Save();
+ render();
+}
 function leanOpenOverview(){if(!active)return;leanClearRestOnlyForNavigation();v4OpenOverview()}
 function leanClearRestOnlyForNavigation(){/* Rest time persists while viewing the overview. */}
 function leanOpenMore(){if(!active)return;liveGo('more')}
@@ -93,7 +110,7 @@ function leanScreen(){
  if(leanIsResting()){
   const remaining=leanRestRemaining(),duration=Math.max(1,active.leanRestDuration||remaining);
   const fraction=100*(remaining/duration);
-  return frame+'<main class="lean-main lean-rest"><h1>Pause</h1><div class="lean-ring" id="lean-ring" style="--rest-progress:'+fraction+'%"><span id="lean-countdown" role="timer" aria-label="Verbleibende Pause">'+leanTime(remaining)+'</span></div><div class="lean-next">'+nextLabel+'</div><div class="lean-fixed"><button type="button" class="lean-primary" onclick="leanResume()">Weiter</button><button type="button" class="lean-text-action" onclick="leanResume()">Pause überspringen</button></div></main></div>';
+  return frame+'<main class="lean-main lean-rest"><h1>Pause</h1><div class="lean-ring" id="lean-ring" style="--rest-progress:'+fraction+'%"><span id="lean-countdown" role="timer" aria-label="Verbleibende Pause">'+leanTime(remaining)+'</span></div><div class="lean-next">'+nextLabel+'</div><div class="lean-fixed"><button type="button" class="lean-primary" onclick="leanResume()">Weiter</button><button type="button" class="lean-text-action" onclick="leanResume()">Pause überspringen</button><button type="button" class="lean-skip-exercise" onclick="leanSkipExercise()">Übung überspringen</button></div></main></div>';
  }
  const row=ex.rows[current];
  // Imported partial per-repetition sessions are editable as full sets.
@@ -103,7 +120,7 @@ function leanScreen(){
   const decimal=key==='kg';
   return '<div class="lean-field"><label for="lean-'+key+'">'+label+'</label><div class="lean-stepper"><button type="button" onclick="leanStep(\''+key+'\',-1)" aria-label="'+label+' verringern">−</button><input type="number" id="lean-'+key+'" name="'+key+'" aria-label="'+label+'" inputmode="'+(decimal?'decimal':'numeric')+'" step="'+step+'" min="'+(decimal?0:1)+'" value="'+esc(value)+'" oninput="leanSetValue(\''+key+'\',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" /><span class="lean-unit">'+(decimal?'kg':'')+'</span><button type="button" onclick="leanStep(\''+key+'\',1)" aria-label="'+label+' erhöhen">+</button></div></div>';
  };
- return frame+'<main class="lean-main lean-set"><div class="lean-current">'+nextLabel+'</div><div class="lean-fields">'+field('reps','Wdh.',reps,1)+field('kg','Gewicht',kg,.5)+'</div><div class="lean-fixed"><button type="button" class="lean-primary" onclick="leanSaveSet()">Satz speichern</button></div></main></div>';
+ return frame+'<main class="lean-main lean-set"><div class="lean-current">'+nextLabel+'</div><div class="lean-fields">'+field('reps','Wdh.',reps,1)+field('kg','Gewicht',kg,.5)+'</div><div class="lean-fixed"><button type="button" class="lean-primary" onclick="leanSaveSet()">Satz speichern</button><button type="button" class="lean-skip-exercise" onclick="leanSkipExercise()">Übung überspringen</button></div></main></div>';
 }
 showTraining=function(){
  if(leanVisible())return leanScreen();
