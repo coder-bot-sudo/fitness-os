@@ -48,6 +48,13 @@ function leanSaveSet(){
  delete row.repetitionLog;
  const restSeconds=Math.max(0,Math.min(3600,Math.round(Number(ex.rest)||0)));
  const nextInExercise=v3Current();
+ // Within the same exercise, preselect the values of the just completed set.
+ // Keep the values local to this exercise; the next exercise uses its own defaults.
+ if(nextInExercise>=0){
+  const nextRow=ex.rows[nextInExercise];
+  nextRow.reps=reps;
+  nextRow.kg=kg;
+ }
  if(nextInExercise<0){
   const next=active.ex.findIndex((exercise,index)=>index>active.focus&&exercise.rows.some(r=>!r.done&&!r.skipped));
   if(next>=0)active.focus=next;
