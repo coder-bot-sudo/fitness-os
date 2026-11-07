@@ -219,8 +219,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.07.1')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.07.1')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.07.2')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.07.2')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -592,6 +592,8 @@ test('lean mockup two-screen flow, timer, next exercise and reload persistence',
  await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
  await page.getByRole('button',{name:'Pause überspringen'}).click();
  await expect(page.getByText('Satz 2 von 2')).toBeVisible();
+ await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toHaveValue('10');
+ await expect(page.getByRole('spinbutton',{name:'Gewicht'})).toHaveValue('60');
  await page.getByRole('spinbutton',{name:'Wdh.'}).fill('8');
  await page.getByRole('spinbutton',{name:'Gewicht'}).fill('62.5');
  await page.getByRole('button',{name:'Satz speichern'}).click();
@@ -643,4 +645,36 @@ test('lean screen is accessible on simulated iPhone and overview remains reachab
  await expect(page.locator('.v4-eyebrow').getByText('TRAININGSÜBERSICHT',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:/Zurück zum aktuellen Satz/}).click();
  await expect(page.locator('.lean-live')).toBeVisible();
+});
+
+test('next set inherits last entered values, including decimal weight, but next exercise remains independent',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex=[
+   {name:'Bankdrücken',sets:3,reps:'8–10',rest:90},
+   {name:'Rudern am Kabel',sets:1,reps:'12',rest:30}
+  ];persist();newSession();
+ });
+ await page.getByRole('spinbutton',{name:'Wdh.'}).fill('11');
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('57.5');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ expect(await page.evaluate(()=>active.ex[0].rows[1])).toMatchObject({reps:11,kg:57.5,done:false});
+ await page.reload();
+ await page.getByRole('button',{name:'Weiter'}).click();
+ await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toHaveValue('11');
+ await expect(page.getByRole('spinbutton',{name:'Gewicht'})).toHaveValue('57.5');
+ await page.getByRole('spinbutton',{name:'Wdh.'}).fill('9');
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('60');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await page.getByRole('button',{name:'Pause überspringen'}).click();
+ await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toHaveValue('9');
+ await expect(page.getByRole('spinbutton',{name:'Gewicht'})).toHaveValue('60');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ await page.getByRole('button',{name:'Weiter'}).click();
+ await expect(page.getByRole('heading',{name:'Rudern am Kabel'})).toBeVisible();
+ await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toHaveValue('12');
+ await expect(page.getByRole('spinbutton',{name:'Gewicht'})).toHaveValue('0');
 });
