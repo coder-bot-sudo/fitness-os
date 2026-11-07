@@ -219,8 +219,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.07.2')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.07.2')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.07.3')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.07.3')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -677,4 +677,101 @@ test('next set inherits last entered values, including decimal weight, but next 
  await expect(page.getByRole('heading',{name:'Rudern am Kabel'})).toBeVisible();
  await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toHaveValue('12');
  await expect(page.getByRole('spinbutton',{name:'Gewicht'})).toHaveValue('0');
+});
+
+test('skip optional upcoming exercise after automatic transition and keep workout statistics correct',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex=[
+   {name:'Bankdrücken',sets:1,reps:'8',rest:45},
+   {name:'Seitheben',sets:2,reps:'12',rest:50},
+   {name:'Latzug',sets:1,reps:'10',rest:60}
+  ];persist();newSession();
+ });
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('60');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Seitheben'})).toBeVisible();
+ await page.getByRole('button',{name:'Übung überspringen'}).click();
+ await expect(page.getByRole('heading',{name:'Latzug'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Pause'})).toHaveCount(0);
+ const snapshot=await page.evaluate(()=>({
+  focus:active.focus,
+  first:active.ex[0].rows[0],
+  skipped:active.ex[1].rows,
+  next:active.ex[2].rows[0],
+  rest:active.leanRestUntil,
+  cloud:JSON.parse(localStorage.getItem('fitness_os_v1')).activeWorkout.ex[1].rows
+ }));
+ expect(snapshot.focus).toBe(2);
+ expect(snapshot.first).toMatchObject({done:true,kg:60});
+ expect(snapshot.skipped.every(r=>r.skipped===true&&r.done===false)).toBe(true);
+ expect(snapshot.cloud.every(r=>r.skipped===true&&r.done===false)).toBe(true);
+ expect(snapshot.next.done).toBe(false);
+ expect(snapshot.rest).toBeNull();
+ await page.reload();
+ await expect(page.getByRole('heading',{name:'Latzug'})).toBeVisible();
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ await expect(page.locator('.v4-ex-card').nth(1)).toContainText('Übersprungen');
+ await page.getByRole('button',{name:/Zurück zum aktuellen Satz/}).click();
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await page.getByRole('button',{name:'Training beenden'}).click();
+ const result=await page.evaluate(()=>({
+  values:db.sessions.at(-1).ex.map(e=>e.rows.map(r=>({done:r.done,skipped:!!r.skipped}))),
+  analytics:analyticsAllSets().filter(r=>r.date===today()).map(r=>r.name)
+ }));
+ expect(result.values).toEqual([
+  [{done:true,skipped:false}],
+  [{done:false,skipped:true},{done:false,skipped:true}],
+  [{done:true,skipped:false}]
+ ]);
+ expect(result.analytics).not.toContain('Seitheben');
+});
+test('skip partially completed exercise retains completed sets and allows restore from overview',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex=[
+   {name:'Bankdrücken',sets:2,reps:'8',rest:45},
+   {name:'Latzug',sets:1,reps:'10',rest:45}
+  ];persist();newSession();
+ });
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await page.getByRole('button',{name:'Pause überspringen'}).click();
+ await page.getByRole('button',{name:'Übung überspringen'}).click();
+ await expect(page.getByRole('heading',{name:'Latzug'})).toBeVisible();
+ const rows=await page.evaluate(()=>active.ex[0].rows);
+ expect(rows[0].done).toBe(true);
+ expect(rows[0].skipped).toBeFalsy();
+ expect(rows[1].done).toBe(false);
+ expect(rows[1].skipped).toBe(true);
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ await expect(page.locator('.v4-ex-card').first()).toContainText('Vorzeitig beendet');
+ await page.locator('.v4-ex-card').first().getByRole('button',{name:/Übung fortsetzen/}).click();
+ await expect(page.getByRole('heading',{name:'Bankdrücken'})).toBeVisible();
+ expect(await page.evaluate(()=>active.ex[0].rows[1].skipped)).toBeFalsy();
+});
+test('skip every exercise without logging reps shows completion and preserves zero completed sets',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex=[
+   {name:'Bankdrücken',sets:2,reps:'8',rest:45},
+   {name:'Latzug',sets:1,reps:'10',rest:45}
+  ];persist();newSession();
+ });
+ await page.getByRole('button',{name:'Übung überspringen'}).click();
+ await expect(page.getByRole('heading',{name:'Latzug'})).toBeVisible();
+ await page.getByRole('button',{name:'Übung überspringen'}).click();
+ await expect(page.getByRole('heading',{name:'Training abgeschlossen'})).toBeVisible();
+ const snapshot=await page.evaluate(()=>({
+  done:active.ex.flatMap(e=>e.rows).filter(r=>r.done).length,
+  skipped:active.ex.flatMap(e=>e.rows).filter(r=>r.skipped).length
+ }));
+ expect(snapshot).toEqual({done:0,skipped:3});
+ // Explicit save with no completed sets still requires confirmation.
+ page.once('dialog',dialog=>dialog.dismiss());
+ await page.getByRole('button',{name:'Training beenden'}).click();
+ expect(await page.evaluate(()=>Boolean(active))).toBe(true);
 });
