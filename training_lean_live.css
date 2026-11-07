@@ -43,3 +43,7 @@ body.lean-session #view{min-height:100dvh}
 @media(max-width:410px){.lean-header{padding-left:9px;padding-right:9px}.lean-main{padding-left:14px;padding-right:14px}.lean-field>label{min-width:80px;font-size:16px}.lean-field{padding:12px;min-height:88px}.lean-stepper input{font-size:23px}.lean-stepper button{min-width:39px}}
 @media(min-width:850px){.lean-main{padding-bottom:32px}.lean-current{margin-top:70px}}
 @media(prefers-reduced-motion:reduce){.lean-progress>span{transition:none}}
+
+/* Quiet opt-out: Satz speichern / Weiter remain the sole filled actions. */
+.lean-skip-exercise{align-self:center;min-height:44px;padding:9px 20px;border:0;border-radius:10px;background:transparent;color:#99acc5;font:inherit;font-size:14px;font-weight:550;cursor:pointer;touch-action:manipulation}
+.lean-skip-exercise:hover{color:#e4ecf7;background:#1b2635}
