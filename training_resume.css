@@ -1,0 +1,5 @@
+.v3-history-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.v3-history-entry>div{min-width:0;flex:1;overflow-wrap:anywhere}
+.v3-resume-btn{min-width:100px;min-height:44px;padding:9px 14px;border:1px solid #4b6382;border-radius:11px;background:transparent;color:#bcd8fb;font:inherit;font-weight:600;cursor:pointer;touch-action:manipulation}
+.v3-resume-btn:hover{background:#1b2e48;border-color:#7098c4}
+.v3-resume-btn:focus-visible{outline:3px solid #9ac9ff;outline-offset:2px}

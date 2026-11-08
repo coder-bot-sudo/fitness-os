@@ -219,8 +219,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.07.3')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.07.3')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.08.1')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.08.1')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -774,4 +774,81 @@ test('skip every exercise without logging reps shows completion and preserves ze
  page.once('dialog',dialog=>dialog.dismiss());
  await page.getByRole('button',{name:'Training beenden'}).click();
  expect(await page.evaluate(()=>Boolean(active))).toBe(true);
+});
+
+test('completed workout can resume unfinished sets and save once without duplicate history',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.sessions.push({id:'early-finish',date:today(),name:'Früh beendet',started:Date.now()-100000,ended:Date.now()-1000,focus:0,ex:[
+   {name:'Bankdrücken',sets:3,reps:'8–10',rest:90,rows:[
+    {kg:60,reps:10,done:true},{kg:62.5,reps:8,done:false},{kg:62.5,reps:8,done:false}
+   ]},
+   {name:'Latzug',sets:1,reps:'10',rest:60,rows:[{kg:40,reps:10,done:false}]}
+  ]});persist();render();
+ });
+ const before=await page.evaluate(()=>db.sessions.length);
+ await page.locator('.v3-history-entry').filter({hasText:'Früh beendet'}).getByRole('button',{name:'Fortsetzen'}).click();
+ await expect(page.getByRole('heading',{name:'Bankdrücken'})).toBeVisible();
+ await expect(page.getByText('Satz 2 von 3')).toBeVisible();
+ await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toHaveValue('8');
+ await expect(page.getByRole('spinbutton',{name:'Gewicht'})).toHaveValue('62.5');
+ expect(await page.evaluate(()=>db.sessions.length)).toBe(before);
+ expect(await page.evaluate(()=>active.id)).toBe('early-finish');
+ await page.reload();
+ await expect(page.getByText('Satz 2 von 3')).toBeVisible();
+ await page.getByRole('spinbutton',{name:'Wdh.'}).fill('9');
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('65');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await page.getByRole('button',{name:'Training verwalten'}).click();
+ await page.getByRole('button',{name:'Training speichern & beenden'}).click();
+ const result=await page.evaluate(()=>({
+  count:db.sessions.length,
+  ids:db.sessions.filter(s=>s.id==='early-finish').length,
+  saved:db.sessions.find(s=>s.id==='early-finish'),
+  active:active,
+  cloud:JSON.parse(localStorage.getItem('fitness_os_v1')).activeWorkout,
+  sets:analyticsAllSets().filter(s=>s.name==='Bankdrücken'&&s.kg===65).length
+ }));
+ expect(result.count).toBe(before);
+ expect(result.ids).toBe(1);
+ expect(result.saved.ex[0].rows[0]).toMatchObject({kg:60,reps:10,done:true});
+ expect(result.saved.ex[0].rows[1]).toMatchObject({kg:65,reps:9,done:true});
+ expect(result.saved.ex[0].rows[2].done).toBe(false);
+ expect(result.saved.resumedFromHistory).toBeUndefined();
+ expect(result.active).toBeNull();
+ expect(result.cloud).toBeNull();
+ expect(result.sets).toBe(1);
+});
+test('fully finished workout can add another set; discarding resumed run preserves original',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ const initial=await page.evaluate(()=>JSON.stringify(db.sessions[0]));
+ const count=await page.evaluate(()=>db.sessions.length);
+ await page.locator('.v3-history-entry').filter({hasText:'Historisches Training'}).getByRole('button',{name:'Fortsetzen'}).click();
+ await expect(page.getByRole('heading',{name:'Bankdrücken'})).toBeVisible();
+ await expect(page.getByText('Satz 2 von 2')).toBeVisible();
+ await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toHaveValue('8');
+ await expect(page.getByRole('spinbutton',{name:'Gewicht'})).toHaveValue('60');
+ expect(await page.evaluate(()=>db.sessions.length)).toBe(count);
+ expect(await page.evaluate(()=>JSON.stringify(db.sessions[0]))).toBe(initial);
+ await page.getByRole('button',{name:'Training verwalten'}).click();
+ page.once('dialog',d=>d.accept());
+ await page.getByRole('button',{name:'Training verwerfen'}).click();
+ await expect(page.getByRole('heading',{name:'Training starten'})).toBeVisible();
+ expect(await page.evaluate(()=>db.sessions.length)).toBe(count);
+ expect(await page.evaluate(()=>JSON.stringify(db.sessions[0]))).toBe(initial);
+});
+test('resume a selected older session, not just newest history entry',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.sessions.push({id:'newest',date:today(),name:'Neuestes Training',started:Date.now()-30000,ended:Date.now(),ex:[
+   {name:'Latzug',sets:1,reps:'10',rest:60,rows:[{kg:50,reps:10,done:true}]}
+  ]});persist();render();
+ });
+ await expect(page.locator('.v3-history-entry')).toHaveCount(2);
+ await page.locator('.v3-history-entry').filter({hasText:'Historisches Training'}).getByRole('button',{name:'Fortsetzen'}).click();
+ expect(await page.evaluate(()=>active.id)).toBe('qa-completed');
+ expect(await page.evaluate(()=>db.sessions.map(s=>s.id))).toEqual(['qa-completed','newest']);
 });
