@@ -1,0 +1,4 @@
+/* Quiet elapsed clock; no additional helper copy. */
+.session-elapsed{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;flex:none;color:#a9bcd4;font-size:12px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:.01em;min-height:36px}
+.session-elapsed-aux{display:flex;justify-content:flex-end;padding:8px 18px 0;background:transparent}
+@media(max-width:410px){.lean-header .session-elapsed{font-size:11px}.lean-header .lean-count{padding:0 1px;font-size:13px}.lean-header{gap:2px}.lean-header .lean-plan-name{font-size:16px}}
