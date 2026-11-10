@@ -219,8 +219,8 @@ test('catalog shows custom exercise option before search and filters',async ({pa
 
 test('release marker and versioned assets appear on iPhone',async ({page})=>{
  await page.goto('/');
- await expect(page.getByText('Fitness OS · v2026.11.10.2')).toBeVisible();
- expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.10.2')))).toBe(true);
+ await expect(page.getByText('Fitness OS · v2026.11.10.3')).toBeVisible();
+ expect(await page.evaluate(()=>Array.from(document.scripts).some(s=>s.src.includes('training_plan_editor.js?v=2026.11.10.3')))).toBe(true);
  await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
  await page.getByRole('button',{name:/Plan bearbeiten/}).click();
  await expect(page.getByRole('button',{name:/Eigene Übung erstellen/})).toHaveCount(0);
@@ -963,4 +963,50 @@ test('discarding workout does not create historical duration',async ({page})=>{
  expect(await page.evaluate(()=>db.sessions.length)).toBe(before);
  expect(await page.evaluate(()=>Boolean(active))).toBe(false);
  await expect(page.locator('#session-elapsed')).toHaveCount(0);
+});
+
+test('correct an already completed live set inline and update statistics without changing done status',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{db.templates[selectedTemplate].ex=[{name:'Bankdrücken',sets:2,reps:'8',rest:90}];persist();newSession()});
+ await page.getByRole('spinbutton',{name:'Wdh.'}).fill('10');
+ await page.getByRole('spinbutton',{name:'Gewicht'}).fill('60');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ const first=page.getByRole('button',{name:'Satz 1 korrigieren'});
+ await expect(first).toBeVisible();
+ await first.click();
+ const editor=page.locator('.v4-correction');
+ await expect(editor).toBeVisible();
+ await editor.getByRole('spinbutton',{name:'Gewicht (kg)'}).fill('62.5');
+ await editor.getByRole('spinbutton',{name:'Wdh.'}).fill('9');
+ await editor.getByRole('button',{name:'Speichern'}).click();
+ await expect(editor).toHaveCount(0);
+ const values=await page.evaluate(()=>({
+  row:active.ex[0].rows[0],
+  local:JSON.parse(localStorage.getItem('fitness_os_v1')).activeWorkout.ex[0].rows[0]
+ }));
+ expect(values.row).toMatchObject({done:true,kg:62.5,reps:9});
+ expect(values.local).toMatchObject({done:true,kg:62.5,reps:9});
+ await page.reload();
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ await expect(page.getByRole('button',{name:'Satz 1 korrigieren'})).toBeVisible();
+ await page.getByRole('button',{name:/Zurück zum aktuellen Satz/}).click();
+ await page.getByRole('button',{name:'Pause überspringen'}).click();
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await page.getByRole('button',{name:'Training beenden'}).click();
+ const final=await page.evaluate(()=>db.sessions.at(-1).ex[0].rows[0]);
+ expect(final).toMatchObject({done:true,kg:62.5,reps:9});
+});
+test('completed set correction cancel leaves original values untouched',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{db.templates[selectedTemplate].ex=[{name:'Bankdrücken',sets:2,reps:'8',rest:90}];persist();newSession()});
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ const before=await page.evaluate(()=>JSON.stringify(active.ex[0].rows[0]));
+ await page.getByRole('button',{name:'Satz 1 korrigieren'}).click();
+ await page.locator('.v4-correction').getByRole('spinbutton',{name:'Gewicht (kg)'}).fill('99');
+ await page.locator('.v4-correction').getByRole('button',{name:'Abbrechen'}).click();
+ expect(await page.evaluate(()=>JSON.stringify(active.ex[0].rows[0]))).toBe(before);
 });
