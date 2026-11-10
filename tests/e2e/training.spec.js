@@ -908,3 +908,59 @@ test('+15 extension does not reactivate an expired rest timer',async ({page})=>{
  await page.evaluate(()=>leanTick());
  await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toBeVisible();
 });
+
+test('elapsed workout time stays visible in set, rest, overview and manage screens',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{
+  db.templates[selectedTemplate].ex=[{name:'Bankdrücken',sets:2,reps:'8',rest:30}];
+  newSession();
+  active.started=Date.now()-145000;
+  v3Save();render();
+ });
+ await expect(page.locator('.lean-header #session-elapsed')).toContainText('02:25');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ await expect(page.locator('.lean-header #session-elapsed')).toContainText('02:25');
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ await expect(page.locator('#v3-duration')).toContainText('02:25');
+ await page.getByRole('button',{name:/Zurück zum aktuellen Satz/}).click();
+ await page.getByRole('button',{name:'Training verwalten'}).click();
+ await expect(page.locator('#session-elapsed')).toBeVisible();
+ await expect(page.locator('#session-elapsed')).toContainText('02:25');
+ await page.reload();
+ await expect(page.locator('#session-elapsed')).toContainText('02:');
+});
+test('workout duration uses persisted start timestamp, displays hours and saves on finish',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:'Training starten'}).click();
+ const expected=await page.evaluate(()=>{
+  active.started=Date.now()-3723000;
+  v3Save();render();
+  return sessionElapsedSeconds();
+ });
+ await expect(page.locator('.lean-header #session-elapsed')).toContainText('01:02:03');
+ await page.reload();
+ await expect(page.locator('.lean-header #session-elapsed')).toContainText('01:02:');
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await page.getByRole('button',{name:'Training beenden'}).click();
+ const result=await page.evaluate(()=>({
+  workout:db.sessions.at(-1),activeWorkout:db.activeWorkout
+ }));
+ expect(result.workout.durationSeconds).toBeGreaterThanOrEqual(expected);
+ expect(result.workout.durationSeconds).toBeLessThan(expected+15);
+ expect(result.activeWorkout).toBeNull();
+});
+test('discarding workout does not create historical duration',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.getByRole('button',{name:'Training starten'}).click();
+ const before=await page.evaluate(()=>db.sessions.length);
+ await page.getByRole('button',{name:'Training verwalten'}).click();
+ page.once('dialog',d=>d.accept());
+ await page.getByRole('button',{name:'Training verwerfen'}).click();
+ expect(await page.evaluate(()=>db.sessions.length)).toBe(before);
+ expect(await page.evaluate(()=>Boolean(active))).toBe(false);
+ await expect(page.locator('#session-elapsed')).toHaveCount(0);
+});
