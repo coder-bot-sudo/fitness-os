@@ -579,7 +579,7 @@ test('lean mockup two-screen flow, timer, next exercise and reload persistence',
  await page.getByRole('spinbutton',{name:'Gewicht'}).fill('60');
  await page.getByRole('button',{name:'Satz speichern'}).click();
  await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
- await expect(page.locator('#lean-countdown')).toContainText('01:');
+ await expect(page.locator('#lean-countdown')).toContainText('02:');
  await expect(page.getByText('Satz 2 von 2')).toBeVisible();
  const saved=await page.evaluate(()=>({
   set:active.ex[0].rows[0],restUntil:active.leanRestUntil,
@@ -851,4 +851,60 @@ test('resume a selected older session, not just newest history entry',async ({pa
  await page.locator('.v3-history-entry').filter({hasText:'Historisches Training'}).getByRole('button',{name:'Fortsetzen'}).click();
  expect(await page.evaluate(()=>active.id)).toBe('qa-completed');
  expect(await page.evaluate(()=>db.sessions.map(s=>s.id))).toEqual(['qa-completed','newest']);
+});
+
+test('all new workout pauses use 2 minutes instead of individual template rest values',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{db.templates[selectedTemplate].ex=[{name:'Bankdrücken',sets:2,reps:'8',rest:15},{name:'Latzug',sets:1,reps:'10',rest:400}];persist();newSession()});
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ const first=await page.evaluate(()=>({duration:active.leanRestDuration,remaining:active.leanRestUntil-Date.now()}));
+ expect(first.duration).toBe(120);
+ expect(first.remaining).toBeGreaterThan(116000);
+ expect(first.remaining).toBeLessThanOrEqual(120000);
+ await page.getByRole('button',{name:'Pause überspringen'}).click();
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ const second=await page.evaluate(()=>({duration:active.leanRestDuration,remaining:active.leanRestUntil-Date.now()}));
+ expect(second.duration).toBe(120);
+ expect(second.remaining).toBeGreaterThan(116000);
+ await page.getByRole('button',{name:'Weiter'}).click();
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ await expect(page.getByRole('heading',{name:'Training abgeschlossen'})).toBeVisible();
+ expect(await page.evaluate(()=>active.leanRestUntil)).toBeNull();
+});
+test('two +15 taps extend the current rest by 30 seconds and persist through navigation and reload',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{db.templates[selectedTemplate].ex=[{name:'Bankdrücken',sets:2,reps:'10',rest:40}];persist();newSession()});
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ const before=await page.evaluate(()=>active.leanRestUntil);
+ const extend=page.getByRole('button',{name:'Pause um 15 Sekunden verlängern'});
+ await expect(extend).toBeVisible();
+ await extend.click();await extend.click();
+ const after=await page.evaluate(()=>({until:active.leanRestUntil,duration:active.leanRestDuration,stored:JSON.parse(localStorage.getItem('fitness_os_active_v3')).leanRestUntil,cloud:JSON.parse(localStorage.getItem('fitness_os_v1')).activeWorkout.leanRestUntil}));
+ expect(after.until-before).toBe(30000);
+ expect(after.duration).toBe(150);
+ expect(after.stored).toBe(after.until);
+ expect(after.cloud).toBe(after.until);
+ await page.getByRole('button',{name:'Trainingsübersicht'}).click();
+ expect(await page.evaluate(()=>active.leanRestUntil)).toBe(after.until);
+ await page.getByRole('button',{name:/Zurück zum aktuellen Satz/}).click();
+ await expect(extend).toBeVisible();
+ await page.reload();
+ await expect(page.getByRole('heading',{name:'Pause'})).toBeVisible();
+ expect(await page.evaluate(()=>active.leanRestUntil)).toBe(after.until);
+ await page.getByRole('button',{name:'Pause überspringen'}).click();
+ await expect(extend).toHaveCount(0);
+ expect(await page.evaluate(()=>active.leanRestUntil)).toBeNull();
+});
+test('+15 extension does not reactivate an expired rest timer',async ({page})=>{
+ await page.goto('/');
+ await page.locator('#sideNav button:visible, #bottomNav button:visible').filter({hasText:'Training'}).first().click();
+ await page.evaluate(()=>{db.templates[selectedTemplate].ex=[{name:'Bankdrücken',sets:2,reps:'8',rest:15}];persist();newSession()});
+ await page.getByRole('button',{name:'Satz speichern'}).click();
+ const result=await page.evaluate(()=>{active.leanRestUntil=Date.now()-100;const old=active.leanRestUntil;leanExtendRest();return {until:active.leanRestUntil,old}});
+ expect(result.until).toBe(result.old);
+ await page.evaluate(()=>leanTick());
+ await expect(page.getByRole('spinbutton',{name:'Wdh.'})).toBeVisible();
 });
