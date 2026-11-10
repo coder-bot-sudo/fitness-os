@@ -55,3 +55,12 @@ button.v4-segment.skipped{cursor:pointer;min-height:34px;touch-action:manipulati
   .v4-ex-card{padding:12px}.v4-status{font-size:9px}.v4-overview{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
   .v4-overview .v4-sticky{top:0}
 }
+
+button.v4-segment.done,button.v4-segment.skipped{cursor:pointer;min-height:44px;touch-action:manipulation}
+.v4-correction{margin:12px 0;padding:14px;border:1px solid #446587;background:#192a3f;border-radius:12px;display:grid;gap:12px}
+.v4-correction>strong{font-size:14px}
+.v4-correction-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.v4-correction-fields label{color:#afc6df;font-size:13px;display:grid;gap:6px}
+.v4-correction-fields input{min-width:0;width:100%;min-height:44px;padding:9px;border:1px solid #456184;border-radius:9px;background:#111e30;color:#f1f7ff}
+.v4-correction-actions{display:flex;gap:9px}
+.v4-correction-actions button{flex:1;min-height:44px}
