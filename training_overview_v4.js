@@ -1,5 +1,5 @@
 /* Fitness OS v4 — complete live workout overview (Hevy/Strong-inspired, mobile-first). */
-let v4OverviewOpen=false;
+let v4OverviewOpen=false,v4EditingSet=null;
 const v4OriginalTraining=showTraining;
 const v4Esc=value=>esc(value);
 function v4Totals(){
@@ -30,10 +30,45 @@ function v4Strip(e,interactive=false,index=-1){
     const isActive=(index<0||index===active.focus)&&j===rows.findIndex(x=>!x.done&&!x.skipped);
     const state=r.done?'done':r.skipped?'skipped':isActive?'active':'pending',label='Satz '+(j+1)+': '+(r.done?'erledigt':r.skipped?'übersprungen':isActive?'aktuell':'offen');
     const text=r.done?'✓':r.skipped?'↶':String(j+1);
-    return interactive&&r.skipped&&!r.done
+    return interactive&&r.done
+      ?'<button type="button" class="v4-segment '+state+'" title="Satz '+(j+1)+' korrigieren" aria-label="Satz '+(j+1)+' korrigieren" onclick="v4EditCompletedSet('+index+','+j+')">'+text+'</button>'
+      :interactive&&r.skipped&&!r.done
       ?'<button type="button" class="v4-segment '+state+'" title="Satz '+(j+1)+' reaktivieren" aria-label="'+label+' – reaktivieren" onclick="v4RestoreSet('+index+','+j+')">'+text+'</button>'
       :'<span class="v4-segment '+state+'" title="'+label+'" aria-label="'+label+'">'+text+'</span>';
   }).join('')+'</div>';
+}
+function v4EditCompletedSet(index,setIndex){
+ const row=active?.ex?.[index]?.rows?.[setIndex];
+ if(!row?.done)return;
+ v4EditingSet={index,setIndex};
+ render();
+ document.getElementById('v4-correct-kg')?.focus({preventScroll:true});
+}
+function v4CancelCorrection(){v4EditingSet=null;render()}
+function v4SetCorrectionForm(index){
+ const selected=v4EditingSet;
+ if(!selected||selected.index!==index)return '';
+ const row=active?.ex?.[index]?.rows?.[selected.setIndex];
+ if(!row?.done)return '';
+ return '<form class="v4-correction" onsubmit="v4SaveCompletedSet(event,'+index+','+selected.setIndex+')">'+
+ '<strong>Satz '+(selected.setIndex+1)+'</strong><div class="v4-correction-fields">'+
+ '<label>Gewicht (kg)<input id="v4-correct-kg" name="kg" type="number" step="0.5" inputmode="decimal" min="0" max="10000" value="'+v4Esc(row.kg)+'" required></label>'+
+ '<label>Wdh.<input name="reps" type="number" inputmode="numeric" min="1" max="1000" step="1" value="'+v4Esc(row.reps)+'" required></label></div>'+
+ '<div class="v4-correction-actions"><button type="button" class="btn secondary" onclick="v4CancelCorrection()">Abbrechen</button><button type="submit" class="btn">Speichern</button></div></form>';
+}
+function v4SaveCompletedSet(event,index,setIndex){
+ event.preventDefault();
+ const row=active?.ex?.[index]?.rows?.[setIndex];
+ if(!row?.done)return;
+ const values=new FormData(event.target),kg=Number(String(values.get('kg')).replace(',','.')),reps=Number(values.get('reps'));
+ if(!Number.isFinite(kg)||kg<0||kg>10000||!Number.isInteger(reps)||reps<1||reps>1000)return;
+ if(Array.isArray(row.repetitionLog)&&row.repetitionLog.length){
+  row.repetitionLogBeforeCorrection=structuredClone(row.repetitionLog);
+  delete row.repetitionLog;
+ }
+ row.kg=kg;row.reps=reps;
+ v4EditingSet=null;
+ v3Save();render();
 }
 function v4OpenOverview(){if(!active)return;v4OverviewOpen=true;render();window.scrollTo({top:0,behavior:'auto'})}
 function v4CloseOverview(){v4OverviewOpen=false;render();window.scrollTo({top:0,behavior:'auto'})}
@@ -76,6 +111,7 @@ function v4OverviewCard(e,i){
   const s=v4ExerciseStatus(e,i),done=e.rows.filter(r=>r.done).length,skipped=e.rows.filter(r=>r.skipped&&!r.done).length;
   return '<article class="v4-ex-card v4-'+s.css+(active.focus===i?' v4-focused':'')+'"><div class="v4-ex-head"><div class="v4-ex-index">'+s.symbol+'</div><div class="v4-ex-text"><h3>'+v4Esc(e.name)+'</h3><div class="v4-ex-meta">'+done+' / '+e.rows.length+' Sätze erledigt'+(skipped?' · '+skipped+' übersprungen':'')+'</div></div><span class="v4-status '+s.css+'">'+s.label+'</span></div>'
     +v4Strip(e,true,i)
+    +v4SetCorrectionForm(i)
     +'<div class="v4-card-actions"><button type="button" class="btn secondary" onclick="v4JumpTo('+i+')">'+(active.focus===i?'Zum aktuellen Satz':'Übung öffnen')+'</button>'
     +(skipped?'<button type="button" class="btn v4-restore" onclick="v4RestoreExercise('+i+')">↶ Übung fortsetzen</button>':'')
     +'</div></article>';
