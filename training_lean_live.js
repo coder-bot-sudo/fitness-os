@@ -3,6 +3,7 @@ const leanPreviousShowTraining=showTraining;
 const leanPreviousRender=render;
 const leanPreviousSelect=v3Select;
 const leanInputNumber=value=>Number(String(value).replace(',','.'));
+const LEAN_DEFAULT_REST_SECONDS=120;
 const leanFormatNumber=value=>Number(value).toLocaleString('de-DE',{maximumFractionDigits:2});
 function leanIsResting(){return Boolean(active?.leanRestUntil&&active.leanRestUntil>Date.now())}
 function leanRestRemaining(){return Math.max(0,Math.ceil(((active?.leanRestUntil||0)-Date.now())/1000))}
@@ -46,7 +47,7 @@ function leanSaveSet(){
  row.kg=kg;row.reps=reps;row.done=true;
  // The new default logs one value per set; old session logs stay untouched.
  delete row.repetitionLog;
- const restSeconds=Math.max(0,Math.min(3600,Math.round(Number(ex.rest)||0)));
+ const restSeconds=LEAN_DEFAULT_REST_SECONDS;
  const nextInExercise=v3Current();
  // Within the same exercise, preselect the values of the just completed set.
  // Keep the values local to this exercise; the next exercise uses its own defaults.
@@ -70,6 +71,14 @@ function leanResume(){
  if(!active)return;
  leanClearRest();
 }
+function leanExtendRest(){
+ if(!active||!leanIsResting())return;
+ active.leanRestUntil+=15000;
+ active.leanRestDuration=Math.max(0,Number(active.leanRestDuration)||LEAN_DEFAULT_REST_SECONDS)+15;
+ v3Save();
+ leanTick();
+}
+
 /* A skipped exercise is never counted as completed. */
 function leanSkipExercise(){
  if(!active)return;
@@ -110,7 +119,7 @@ function leanScreen(){
  if(leanIsResting()){
   const remaining=leanRestRemaining(),duration=Math.max(1,active.leanRestDuration||remaining);
   const fraction=100*(remaining/duration);
-  return frame+'<main class="lean-main lean-rest"><h1>Pause</h1><div class="lean-ring" id="lean-ring" style="--rest-progress:'+fraction+'%"><span id="lean-countdown" role="timer" aria-label="Verbleibende Pause">'+leanTime(remaining)+'</span></div><div class="lean-next">'+nextLabel+'</div><div class="lean-fixed"><button type="button" class="lean-primary" onclick="leanResume()">Weiter</button><button type="button" class="lean-text-action" onclick="leanResume()">Pause überspringen</button><button type="button" class="lean-skip-exercise" onclick="leanSkipExercise()">Übung überspringen</button></div></main></div>';
+  return frame+'<main class="lean-main lean-rest"><h1>Pause</h1><div class="lean-ring" id="lean-ring" style="--rest-progress:'+fraction+'%"><span id="lean-countdown" role="timer" aria-label="Verbleibende Pause">'+leanTime(remaining)+'</span></div><button type="button" class="lean-add-time" onclick="leanExtendRest()" aria-label="Pause um 15 Sekunden verlängern">+15 s</button><div class="lean-next">'+nextLabel+'</div><div class="lean-fixed"><button type="button" class="lean-primary" onclick="leanResume()">Weiter</button><button type="button" class="lean-text-action" onclick="leanResume()">Pause überspringen</button><button type="button" class="lean-skip-exercise" onclick="leanSkipExercise()">Übung überspringen</button></div></main></div>';
  }
  const row=ex.rows[current];
  // Imported partial per-repetition sessions are editable as full sets.
