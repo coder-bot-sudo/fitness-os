@@ -47,3 +47,7 @@ body.lean-session #view{min-height:100dvh}
 /* Quiet opt-out: Satz speichern / Weiter remain the sole filled actions. */
 .lean-skip-exercise{align-self:center;min-height:44px;padding:9px 20px;border:0;border-radius:10px;background:transparent;color:#99acc5;font:inherit;font-size:14px;font-weight:550;cursor:pointer;touch-action:manipulation}
 .lean-skip-exercise:hover{color:#e4ecf7;background:#1b2635}
+
+.lean-add-time{align-self:center;margin-top:14px;min-width:104px;min-height:46px;padding:9px 18px;border:1px solid #466384;border-radius:999px;background:transparent;color:#c9dcf4;font:inherit;font-size:16px;font-weight:700;cursor:pointer;touch-action:manipulation}
+.lean-add-time:hover,.lean-add-time:active{background:#1c3049}
+.lean-add-time:focus-visible{outline:3px solid #9fccff;outline-offset:3px}
